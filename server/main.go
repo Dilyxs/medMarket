@@ -20,4 +20,5 @@ func main() {
 		id := rand.Intn(100000000)
 		pkg.AddNewUserViewerToHub(broadcastServerHub, w, r, id)
 	})
+	http.ListenAndServe(":8080", nil)
 }

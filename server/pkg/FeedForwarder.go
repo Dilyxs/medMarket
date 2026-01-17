@@ -68,7 +68,9 @@ func AddNewUserViewerToHub(hub *BroadcastServerHub, w http.ResponseWriter, r *ht
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusUpgradeRequired)
-		w.Write([]byte(`{"error": "WebSocket upgrade failed"}`))
+		if _, ConnectionErr := w.Write([]byte(`{"error": "WebSocket upgrade failed"}`)); ConnectionErr != nil {
+			return
+		}
 	}
 	VideoUser := &UserViewer{
 		ID:                        viewerID,
@@ -140,12 +142,11 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 		}
 	}
 	defer func() {
-		err := conn.Close()
-		if err != nil { // this happens if the user just leaves the page or something and conn is lost!
-			select {
-			case hub.EndOFStream <- true:
-			default:
-			}
+		conn.Close()
+		select {
+		case hub.EndOFStream <- true:
+		default:
+
 		}
 	}()
 	Broadcaster := &Broadcaster{
@@ -156,8 +157,8 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 }
 
 func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
-	var newMessage VideoFrameWithAnnotations
 	for {
+		var newMessage VideoFrameWithAnnotations
 		err := b.Conn.ReadJSON(&newMessage)
 		if err != nil {
 			fmt.Println("cannot decode video")
