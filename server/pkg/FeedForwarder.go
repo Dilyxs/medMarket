@@ -130,7 +130,7 @@ func (b *BroadcastServerHub) EnndBroadcastingSession() {
 	}
 }
 
-func (b *Broadcaster) ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.Request) {
+func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -187,6 +187,7 @@ func NewBroadcastServerHub() *BroadcastServerHub {
 		VideoDetailsChan:                      make(chan VideoFrameWithAnnotations, 1000),
 		EndOFStream:                           make(chan bool),
 		ListenForIncomingUserOrDisconnections: make(chan *UserViewerAddition, 1000),
+		Mu:                                    sync.RWMutex{},
 	}
 }
 
