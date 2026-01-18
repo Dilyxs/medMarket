@@ -14,6 +14,7 @@ type UserViewer struct {
 	Conn                      *websocket.Conn
 	UserReceivingVideoDetails chan VideoFrameWithAnnotations
 	QandAnswerChan            chan QandAnswer
+	done                      chan struct{}
 }
 type Broadcaster struct {
 	ID                      int
@@ -100,18 +101,16 @@ type UserViewerAddition struct {
 }
 
 func AddNewUserViewerToHub(hub *BroadcastServerHub, w http.ResponseWriter, r *http.Request, viewerID int) {
-	w.Header().Set("Content-Type", "application/json")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		w.WriteHeader(http.StatusUpgradeRequired)
-		if _, ConnectionErr := w.Write([]byte(`{"error": "WebSocket upgrade failed"}`)); ConnectionErr != nil {
-			return
-		}
+		log.Printf("Viewer WebSocket upgrade failed: %v", err)
+		return
 	}
 	VideoUser := &UserViewer{
 		ID:                        viewerID,
 		Conn:                      conn,
 		UserReceivingVideoDetails: make(chan VideoFrameWithAnnotations, 1000),
+		done:                      make(chan struct{}),
 	}
 	hub.ListenForIncomingUserOrDisconnections <- &UserViewerAddition{
 		User:       VideoUser,
@@ -124,6 +123,10 @@ func AddNewUserViewerToHub(hub *BroadcastServerHub, w http.ResponseWriter, r *ht
 
 func (v *UserViewer) ReadPump(hub *BroadcastServerHub) {
 	defer func() {
+		// Signal all goroutines to stop before closing connection
+		close(v.done)
+		// Give other goroutines a moment to exit cleanly
+		time.Sleep(50 * time.Millisecond)
 		v.Conn.Close()
 		hub.ListenForIncomingUserOrDisconnections <- &UserViewerAddition{
 			User:       v,
@@ -161,11 +164,16 @@ func (b *BroadcastServerHub) AddOrRemoveUser() {
 }
 
 func (v *UserViewer) ListenForVideoDetails() {
-	for message := range v.UserReceivingVideoDetails {
-		v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		if err := v.Conn.WriteJSON(message); err != nil { // happens if user ends the session
-			log.Printf("Viewer %d ListenForVideoDetails error: %v", v.ID, err)
+	for {
+		select {
+		case <-v.done:
 			return
+		case message := <-v.UserReceivingVideoDetails:
+			v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := v.Conn.WriteJSON(message); err != nil { // happens if user ends the session
+				log.Printf("Viewer %d ListenForVideoDetails error: %v", v.ID, err)
+				return
+			}
 		}
 	}
 }
@@ -174,11 +182,16 @@ func (v *UserViewer) PingLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	
-	for range ticker.C {
-		v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		if err := v.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-			log.Printf("Viewer %d PingLoop error: %v", v.ID, err)
+	for {
+		select {
+		case <-v.done:
 			return
+		case <-ticker.C:
+			v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := v.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("Viewer %d PingLoop error: %v", v.ID, err)
+				return
+			}
 		}
 	}
 }
@@ -206,13 +219,10 @@ func (b *BroadcastServerHub) EnndBroadcastingSession() {
 }
 
 func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		w.WriteHeader(http.StatusUpgradeRequired)
-		if _, ConnErr := w.Write([]byte(`{"error": "WebSocket upgrade failed"}`)); ConnErr != nil {
-			hub.EndOFStream <- true
-		}
+		log.Printf("Broadcaster WebSocket upgrade failed: %v", err)
+		return
 	}
 	
 	// Clean up any existing session when new broadcaster connects
