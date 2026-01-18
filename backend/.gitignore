@@ -1,2 +1,6 @@
 go.sum
 .venv
+.env
+app-bank.json
+node_modules
+generate-wallet.js
