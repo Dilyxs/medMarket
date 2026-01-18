@@ -8,12 +8,17 @@ import { useState } from "react";
 interface ChatWidgetProps {
   isOpen: boolean;
   onToggle: () => void;
+  className?: string;
 }
 
-export function ChatWidget({ isOpen, onToggle }: ChatWidgetProps) {
+export function ChatWidget({ isOpen, onToggle, className }: ChatWidgetProps) {
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  if (!isOpen) {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +51,9 @@ export function ChatWidget({ isOpen, onToggle }: ChatWidgetProps) {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 h-[500px] flex flex-col bg-card border border-border rounded-lg shadow-lg z-50">
+    <div
+      className={`flex h-full w-full flex-col bg-card border border-border rounded-lg shadow-lg ${className ?? ""}`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <h3 className="font-semibold text-foreground">medmarket Assistant</h3>

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChatWidget } from "@/components/chat-widget";
+import { LiveBroadcastViewer } from "@/components/live-broadcast";
+import { LiveChatPanel } from "@/components/live-chat";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
 
@@ -98,50 +100,47 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex flex-col items-center justify-center min-h-screen px-4">
-        <h1 className="text-4xl font-bold text-foreground mb-4">Welcome to medmarket</h1>
-        <p className="text-lg text-muted-foreground max-w-2xl text-center">
-          Upload or describe medical market data, and let our AI assistant help you understand and analyze it.
-        </p>
+      {/* Main Content - 4 corners */}
+      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3.5fr_1.5fr] gap-0 h-[calc(100vh-73px)]">
+        {/* Top Left - Live Viewer */}
+        <div className="bg-card flex items-center justify-center border-r border-b border-border p-4">
+          <LiveBroadcastViewer />
+        </div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl">
-          <div className="p-6 border border-border rounded-lg">
-            <h3 className="font-semibold text-foreground mb-2">Describe Your Data</h3>
-            <p className="text-sm text-muted-foreground">
-              Tell the AI what you see on your screen, and it will ask clarifying questions to understand your medical market data better.
-            </p>
-          </div>
+        {/* Top Right - Live Chat */}
+        <div className="bg-card border-b border-border p-4">
+          <LiveChatPanel />
+        </div>
 
-          <div className="p-6 border border-border rounded-lg">
-            <h3 className="font-semibold text-foreground mb-2">Get Insights</h3>
-            <p className="text-sm text-muted-foreground">
-              Receive personalized analysis and recommendations based on your data and market trends.
-            </p>
-          </div>
-
-          <div className="p-6 border border-border rounded-lg">
-            <h3 className="font-semibold text-foreground mb-2">Real-time Assistance</h3>
-            <p className="text-sm text-muted-foreground">
-              Our AI assistant is always ready to help you clarify details and understand your medical market information.
-            </p>
+        {/* Bottom Left - Place Your Bets */}
+        <div className="bg-card border-r border-border p-6 flex flex-col gap-4">
+          <h2 className="text-xl font-semibold text-foreground">Place your bets</h2>
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <button className="w-full px-4 py-3 text-base font-medium bg-green-600 hover:bg-green-700 text-white rounded-md">
+              Bet High
+            </button>
+            <button className="w-full px-4 py-3 text-base font-medium bg-red-600 hover:bg-red-700 text-white rounded-md">
+              Bet Low
+            </button>
           </div>
         </div>
+
+        {/* Bottom Right - AI Assistant */}
+        <div className="relative bg-card p-4">
+          {isChatOpen && (
+            <ChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(false)} />
+          )}
+          {!isChatOpen && (
+            <button
+              onClick={() => setIsChatOpen(true)}
+              className="absolute bottom-4 right-4 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition z-40"
+              aria-label="Open chat"
+            >
+              <MessageCircleIcon size={24} />
+            </button>
+          )}
+        </div>
       </div>
-
-      {/* Chat Widget */}
-      {isChatOpen && <ChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(false)} />}
-
-      {/* Toggle Button (when chat is closed) */}
-      {!isChatOpen && (
-        <button
-          onClick={() => setIsChatOpen(true)}
-          className="fixed bottom-4 right-4 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition z-40"
-          aria-label="Open chat"
-        >
-          <MessageCircleIcon size={24} />
-        </button>
-      )}
     </div>
   );
 }
