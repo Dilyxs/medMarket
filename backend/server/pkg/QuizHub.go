@@ -183,16 +183,14 @@ func (h *QuizHub) handleNewQuestion(question *Question) {
 	if h.GameState.QuestionActive {
 		h.GameState.QuestionQueue = append(h.GameState.QuestionQueue, question)
 		log.Printf("Question queued: %s (%d in queue)\n", question.Question, len(h.GameState.QuestionQueue))
+		h.Mu.Unlock()
 		
 		// Notify broadcaster
-		if h.Broadcaster != nil {
-			h.Broadcaster.Send <- map[string]interface{}{
-				"type": "question_queued",
-				"question": question,
-				"queue_position": len(h.GameState.QuestionQueue),
-			}
-		}
-		h.Mu.Unlock()
+		h.notifyBroadcaster(map[string]interface{}{
+			"type": "question_queued",
+			"question": question,
+			"queue_position": len(h.GameState.QuestionQueue),
+		})
 		return
 	}
 	
@@ -226,16 +224,10 @@ func (h *QuizHub) handleNewQuestion(question *Question) {
 	h.broadcastToPlayers(broadcastMsg)
 	
 	// Notify broadcaster that question is live
-	h.Mu.RLock()
-	broadcaster := h.Broadcaster
-	h.Mu.RUnlock()
-	
-	if broadcaster != nil {
-		broadcaster.Send <- map[string]interface{}{
-			"type": "question_live",
-			"question_id": question.ID,
-		}
-	}
+	h.notifyBroadcaster(map[string]interface{}{
+		"type": "question_live",
+		"question_id": question.ID,
+	})
 	
 	// Start timer
 	h.Mu.Lock()
@@ -446,13 +438,7 @@ func (h *QuizHub) processQuestionResults() {
 	h.broadcastToPlayers(results)
 	
 	// Notify broadcaster
-	h.Mu.RLock()
-	broadcaster := h.Broadcaster
-	h.Mu.RUnlock()
-	
-	if broadcaster != nil {
-		broadcaster.Send <- results
-	}
+	h.notifyBroadcaster(results)
 	
 	// Eliminate players by disconnecting them
 	h.Mu.RLock()
@@ -482,16 +468,10 @@ func (h *QuizHub) processQuestionResults() {
 			"results": results,
 		})
 		
-		h.Mu.RLock()
-		broadcaster := h.Broadcaster
-		h.Mu.RUnlock()
-		
-		if broadcaster != nil {
-			broadcaster.Send <- map[string]interface{}{
-				"type": "game_ended",
-				"results": results,
-			}
-		}
+		h.notifyBroadcaster(map[string]interface{}{
+			"type": "game_ended",
+			"results": results,
+		})
 	} else {
 		// Process next question in queue
 		h.Mu.Lock()
@@ -506,16 +486,10 @@ func (h *QuizHub) processQuestionResults() {
 		} else {
 			h.Mu.Unlock()
 			// Notify broadcaster they can submit next question
-			h.Mu.RLock()
-			broadcaster := h.Broadcaster
-			h.Mu.RUnlock()
-			
-			if broadcaster != nil {
-				broadcaster.Send <- map[string]interface{}{
-					"type": "ready_for_question",
-					"remaining_players": remainingCount,
-				}
-			}
+			h.notifyBroadcaster(map[string]interface{}{
+				"type": "ready_for_question",
+				"remaining_players": remainingCount,
+			})
 		}
 	}
 }
@@ -559,6 +533,19 @@ func (h *QuizHub) broadcastToPlayers(msg interface{}) {
 		case player.Send <- msg:
 		default:
 			// Skip if channel full
+		}
+	}
+}
+
+func (h *QuizHub) notifyBroadcaster(msg interface{}) {
+	h.Mu.RLock()
+	defer h.Mu.RUnlock()
+	
+	if h.Broadcaster != nil {
+		select {
+		case h.Broadcaster.Send <- msg:
+		default:
+			// Don't block if channel full
 		}
 	}
 }
