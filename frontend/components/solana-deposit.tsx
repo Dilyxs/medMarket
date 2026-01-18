@@ -84,7 +84,27 @@ export function SolanaDeposit() {
       }
 
       const result = await response.json();
-      setMessage(`✓ Deposit successful! Credited: ${result.credited_lamports / LAMPORTS_PER_SOL} SOL`);
+      const creditedSol = result.credited_lamports / LAMPORTS_PER_SOL;
+      setMessage(`✓ Deposit verified! Crediting ${creditedSol.toFixed(4)} SOL...`);
+
+      // Credit user balance in MongoDB
+      const creditRes = await fetch("/api/deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          amount: creditedSol,
+          signature: sig,
+          walletAddress: publicKey.toBase58(),
+        }),
+      });
+
+      if (!creditRes.ok) {
+        const creditError = await creditRes.json();
+        throw new Error(creditError.error || "Failed to credit balance");
+      }
+
+      setMessage(`✓ Deposit successful! ${creditedSol.toFixed(4)} SOL credited to your account.`);
     } catch (error: any) {
       console.error("Deposit error:", error);
       setMessage(`Error: ${error.message || "Transaction failed"}`);
