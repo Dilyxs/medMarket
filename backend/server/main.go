@@ -90,16 +90,16 @@ func main() {
 		userID := r.URL.Query().Get("userId")
 		username := r.URL.Query().Get("username")
 		email := r.URL.Query().Get("email")
-		
+
 		if userID == "" || email == "" {
 			http.Error(w, "Missing user credentials", http.StatusBadRequest)
 			return
 		}
-		
+
 		if username == "" {
 			username = email
 		}
-		
+
 		pkg.ConnectQuizPlayer(quizHub, w, r, userID, username, email)
 	})
 	router.HandleFunc("/verify_deposit", pkg.VerifyDeposit)

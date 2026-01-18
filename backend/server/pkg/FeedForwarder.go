@@ -15,12 +15,15 @@ type UserViewer struct {
 	UserReceivingVideoDetails chan VideoFrameWithAnnotations
 	QandAnswerChan            chan QandAnswer
 	done                      chan struct{}
+	Mu                        sync.Mutex
 }
 type Broadcaster struct {
 	ID                      int
 	Conn                    *websocket.Conn
 	UserReadingVideoDetails chan VideoFrameWithAnnotations
+	Mu                      sync.Mutex
 }
+
 type BoundingBox struct {
 	XMin   int `json:"x_min"`
 	YMin   int `json:"y_min"`
@@ -96,6 +99,7 @@ type BroadcastServerHub struct {
 	CurrentSession string
 	AIClient       *AIServiceClient
 }
+
 type UserViewerAddition struct {
 	User       *UserViewer
 	WantsToAdd bool
@@ -112,6 +116,7 @@ func AddNewUserViewerToHub(hub *BroadcastServerHub, w http.ResponseWriter, r *ht
 		Conn:                      conn,
 		UserReceivingVideoDetails: make(chan VideoFrameWithAnnotations, 1000),
 		done:                      make(chan struct{}),
+		Mu:                        sync.Mutex{},
 	}
 	hub.ListenForIncomingUserOrDisconnections <- &UserViewerAddition{
 		User:       VideoUser,
@@ -134,14 +139,14 @@ func (v *UserViewer) ReadPump(hub *BroadcastServerHub) {
 			WantsToAdd: false,
 		}
 	}()
-	
+
 	// Set up pong handler to keep connection alive
 	v.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	v.Conn.SetPongHandler(func(string) error {
 		v.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		return nil
 	})
-	
+
 	for {
 		if _, _, err := v.Conn.ReadMessage(); err != nil { // ok so frontend will always send in some pings and other stuff, just ignore that stuff
 			log.Printf("Viewer %d ReadPump error: %v", v.ID, err)
@@ -170,11 +175,13 @@ func (v *UserViewer) ListenForVideoDetails() {
 		case <-v.done:
 			return
 		case message := <-v.UserReceivingVideoDetails:
+			v.Mu.Lock()
 			v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := v.Conn.WriteJSON(message); err != nil { // happens if user ends the session
 				log.Printf("Viewer %d ListenForVideoDetails error: %v", v.ID, err)
 				return
 			}
+			v.Mu.Unlock()
 		}
 	}
 }
@@ -182,17 +189,19 @@ func (v *UserViewer) ListenForVideoDetails() {
 func (v *UserViewer) PingLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-v.done:
 			return
 		case <-ticker.C:
 			v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			v.Mu.Lock()
 			if err := v.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("Viewer %d PingLoop error: %v", v.ID, err)
 				return
 			}
+			v.Mu.Unlock()
 		}
 	}
 }
@@ -225,7 +234,7 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 		log.Printf("Broadcaster WebSocket upgrade failed: %v", err)
 		return
 	}
-	
+
 	// Clean up any existing session when new broadcaster connects
 	if hub.CurrentSession != "" {
 		log.Printf("New broadcaster connecting, cleaning up old session: %s", hub.CurrentSession)
@@ -234,7 +243,7 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 		}
 		hub.CurrentSession = ""
 	}
-	
+
 	defer func() {
 		conn.Close()
 		// Clean up AI session on broadcaster disconnect
@@ -254,35 +263,40 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 	Broadcaster := &Broadcaster{
 		Conn:                    conn,
 		UserReadingVideoDetails: make(chan VideoFrameWithAnnotations, 1000),
+		Mu:                      sync.Mutex{},
 	}
-	
+
 	// Start goroutine to send annotated frames back to broadcaster
 	go func() {
 		for frame := range Broadcaster.UserReadingVideoDetails {
+			Broadcaster.Mu.Lock()
 			if err := Broadcaster.Conn.WriteJSON(frame); err != nil {
 				log.Printf("Error sending frame to broadcaster: %v", err)
 				return
 			}
+			Broadcaster.Mu.Unlock()
 		}
 	}()
-	
+
 	Broadcaster.ListenForVideoInput(hub)
 }
 
 func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 	for {
 		var newMessage VideoFrameValere
+		b.Mu.Lock()
 		err := b.Conn.ReadJSON(&newMessage)
+		b.Mu.Unlock()
 		if err != nil {
 			log.Printf("Error decoding video frame: %v", err)
 			hub.EndOFStream <- true
 			return
 		}
-		
+
 		log.Printf("Received frame: size=%d bytes, hasRectangle=%v", len(newMessage.Frame), newMessage.HasRectangle)
 
 		var annotatedFrame VideoFrameWithAnnotations
-		
+
 		if !newMessage.HasRectangle {
 			// No annotation - pass frame through with empty metadata
 			// If we had an active session, end it
@@ -293,7 +307,7 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 				}
 				hub.CurrentSession = ""
 			}
-			
+
 			annotatedFrame = VideoFrameWithAnnotations{
 				Frame:    newMessage.Frame,
 				Metadata: AnnotationMetadata{},
@@ -315,7 +329,6 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 
 				if err != nil {
 					log.Printf("AI service error starting session: %v", err)
-					// Graceful degradation - send frame with empty metadata
 					metadata = AnnotationMetadata{}
 				} else {
 					hub.CurrentSession = sessionID
@@ -323,7 +336,6 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 					log.Printf("AI session started: %s with %d regions detected", sessionID, frameData.MasksDetected)
 				}
 			} else {
-				// Subsequent frame - continue tracking
 				frameData, err := hub.AIClient.ProcessFrameStreaming(
 					hub.CurrentSession,
 					newMessage.Frame,
@@ -335,8 +347,7 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 					metadata = AnnotationMetadata{}
 				} else {
 					metadata = frameData
-					
-					// Check if tracking was lost (no regions detected)
+
 					if metadata.MasksDetected == 0 {
 						log.Printf("Tracking lost, restarting session with new rectangle")
 						// End current session
@@ -344,13 +355,13 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 							log.Printf("Error ending session: %v", endErr)
 						}
 						hub.CurrentSession = ""
-						
+
 						// Restart with the current rectangle annotation
 						sessionID, frameData, restartErr := hub.AIClient.StartSegmentationSession(
 							newMessage.Frame,
 							newMessage.RectangleData,
 						)
-						
+
 						if restartErr != nil {
 							log.Printf("AI service error restarting session: %v", restartErr)
 							metadata = AnnotationMetadata{}
@@ -368,10 +379,10 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 				Metadata: metadata,
 			}
 		}
-		
+
 		// Send frame with metadata to viewers
 		hub.VideoDetailsChan <- annotatedFrame
-		
+
 		// Send frame with metadata back to broadcaster
 		select {
 		case b.UserReadingVideoDetails <- annotatedFrame:
