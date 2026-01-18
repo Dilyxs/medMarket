@@ -31,73 +31,6 @@ type QuestionForClient struct {
 	StartTime int64    `json:"start_time"` // Unix timestamp in ms
 }
 
-// WebSocket message types
-type WSMessage interface {
-	MessageType() string
-}
-
-type NewQuestionMsg struct {
-	Type     string            `json:"type"`
-	Question QuestionForClient `json:"question"`
-}
-
-func (m NewQuestionMsg) MessageType() string { return "new_question" }
-
-type BetConfirmedMsg struct {
-	Type       string    `json:"type"`
-	Bets       []float64 `json:"bets"`
-	NewBalance float64   `json:"new_balance"`
-}
-
-func (m BetConfirmedMsg) MessageType() string { return "bet_confirmed" }
-
-type EliminatedMsg struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-}
-
-func (m EliminatedMsg) MessageType() string { return "eliminated" }
-
-type GameStateMsg struct {
-	Type            string             `json:"type"`
-	GameActive      bool               `json:"game_active"`
-	Jackpot         float64            `json:"jackpot"`
-	Tokens          float64            `json:"tokens"`
-	IsActive        bool               `json:"is_active"`
-	CurrentQuestion *QuestionForClient `json:"current_question,omitempty"`
-}
-
-func (m GameStateMsg) MessageType() string { return "game_state" }
-
-type GameEndedMsg struct {
-	Type    string      `json:"type"`
-	Results QuizResults `json:"results"`
-}
-
-func (m GameEndedMsg) MessageType() string { return "game_ended" }
-
-type QuestionLiveMsg struct {
-	Type       string `json:"type"`
-	QuestionID string `json:"question_id"`
-}
-
-func (m QuestionLiveMsg) MessageType() string { return "question_live" }
-
-type QuestionQueuedMsg struct {
-	Type          string    `json:"type"`
-	Question      *Question `json:"question"`
-	QueuePosition int       `json:"queue_position"`
-}
-
-func (m QuestionQueuedMsg) MessageType() string { return "question_queued" }
-
-type ReadyForQuestionMsg struct {
-	Type             string `json:"type"`
-	RemainingPlayers int    `json:"remaining_players"`
-}
-
-func (m ReadyForQuestionMsg) MessageType() string { return "ready_for_question" }
-
 // BetSubmission represents a player's bet on a question
 type BetSubmission struct {
 	PlayerID   string    `json:"player_id"`
@@ -112,7 +45,7 @@ type QuizPlayer struct {
 	Username     string
 	Email        string
 	Conn         *websocket.Conn
-	Send         chan WSMessage
+	Send         chan interface{}
 	Tokens       float64
 	IsActive     bool // false if eliminated
 	CurrentBets  []float64
@@ -122,7 +55,7 @@ type QuizPlayer struct {
 // QuizBroadcaster represents the broadcaster/host
 type QuizBroadcaster struct {
 	Conn *websocket.Conn
-	Send chan WSMessage
+	Send chan interface{}
 }
 
 // QuizResults sent after each question
@@ -143,8 +76,6 @@ type PlayerResult struct {
 	TokensLost    float64   `json:"tokens_lost"`
 	NewBalance    float64   `json:"new_balance"`
 }
-
-func (r QuizResults) MessageType() string { return r.Type }
 
 // QuizGameState tracks the current game state
 type QuizGameState struct {
@@ -255,10 +186,10 @@ func (h *QuizHub) handleNewQuestion(question *Question) {
 		h.Mu.Unlock()
 		
 		// Notify broadcaster
-		h.notifyBroadcaster(QuestionQueuedMsg{
-			Type:          "question_queued",
-			Question:      question,
-			QueuePosition: len(h.GameState.QuestionQueue),
+		h.notifyBroadcaster(map[string]interface{}{
+			"type": "question_queued",
+			"question": question,
+			"queue_position": len(h.GameState.QuestionQueue),
 		})
 		return
 	}
@@ -282,9 +213,9 @@ func (h *QuizHub) handleNewQuestion(question *Question) {
 		StartTime: time.Now().UnixMilli(),
 	}
 	
-	broadcastMsg := NewQuestionMsg{
-		Type:     "new_question",
-		Question: questionMsg,
+	broadcastMsg := map[string]interface{}{
+		"type":     "new_question",
+		"question": questionMsg,
 	}
 	
 	log.Printf("Broadcasting question to players: ID=%s, Question=%s, Options=%v, TimeLimit=%d\n", 
@@ -293,9 +224,9 @@ func (h *QuizHub) handleNewQuestion(question *Question) {
 	h.broadcastToPlayers(broadcastMsg)
 	
 	// Notify broadcaster that question is live
-	h.notifyBroadcaster(QuestionLiveMsg{
-		Type:       "question_live",
-		QuestionID: question.ID,
+	h.notifyBroadcaster(map[string]interface{}{
+		"type": "question_live",
+		"question_id": question.ID,
 	})
 	
 	// Start timer
@@ -345,10 +276,10 @@ func (h *QuizHub) handleBetSubmission(bet *BetSubmission) {
 	log.Printf("Player %s bet %.2f tokens across %d options\n", bet.PlayerID, totalBet, len(bet.Bets))
 	
 	// Notify player of successful bet
-	player.Send <- BetConfirmedMsg{
-		Type:       "bet_confirmed",
-		Bets:       bet.Bets,
-		NewBalance: player.Tokens,
+	player.Send <- map[string]interface{}{
+		"type": "bet_confirmed",
+		"bets": bet.Bets,
+		"new_balance": player.Tokens,
 	}
 }
 
@@ -513,9 +444,9 @@ func (h *QuizHub) processQuestionResults() {
 	h.Mu.RLock()
 	for _, playerID := range results.EliminatedPlayers {
 		if player, exists := h.Players[playerID]; exists {
-			player.Send <- EliminatedMsg{
-				Type:    "eliminated",
-				Message: "You have been eliminated from the quiz!",
+			player.Send <- map[string]interface{}{
+				"type": "eliminated",
+				"message": "You have been eliminated from the quiz!",
 			}
 			// Close connection after a delay to ensure message is sent
 			go func(p *QuizPlayer) {
@@ -532,14 +463,14 @@ func (h *QuizHub) processQuestionResults() {
 		h.GameState.GameActive = false
 		h.Mu.Unlock()
 		
-		h.broadcastToPlayers(GameEndedMsg{
-			Type:    "game_ended",
-			Results: results,
+		h.broadcastToPlayers(map[string]interface{}{
+			"type": "game_ended",
+			"results": results,
 		})
 		
-		h.notifyBroadcaster(GameEndedMsg{
-			Type:    "game_ended",
-			Results: results,
+		h.notifyBroadcaster(map[string]interface{}{
+			"type": "game_ended",
+			"results": results,
 		})
 	} else {
 		// Process next question in queue
@@ -555,9 +486,9 @@ func (h *QuizHub) processQuestionResults() {
 		} else {
 			h.Mu.Unlock()
 			// Notify broadcaster they can submit next question
-			h.notifyBroadcaster(ReadyForQuestionMsg{
-				Type:             "ready_for_question",
-				RemainingPlayers: remainingCount,
+			h.notifyBroadcaster(map[string]interface{}{
+				"type": "ready_for_question",
+				"remaining_players": remainingCount,
 			})
 		}
 	}
@@ -567,12 +498,12 @@ func (h *QuizHub) sendGameStateToPlayer(player *QuizPlayer) {
 	h.Mu.RLock()
 	defer h.Mu.RUnlock()
 	
-	state := GameStateMsg{
-		Type:       "game_state",
-		GameActive: h.GameState.GameActive,
-		Jackpot:    h.GameState.Jackpot,
-		Tokens:     player.Tokens,
-		IsActive:   player.IsActive,
+	state := map[string]interface{}{
+		"type": "game_state",
+		"game_active": h.GameState.GameActive,
+		"jackpot": h.GameState.Jackpot,
+		"tokens": player.Tokens,
+		"is_active": player.IsActive,
 	}
 	
 	if h.GameState.QuestionActive && h.GameState.CurrentQuestion != nil {
@@ -580,21 +511,20 @@ func (h *QuizHub) sendGameStateToPlayer(player *QuizPlayer) {
 		remaining := float64(h.GameState.CurrentQuestion.TimeLimit) - elapsed
 		
 		if remaining > 0 {
-			questionForClient := QuestionForClient{
+			state["current_question"] = QuestionForClient{
 				ID:        h.GameState.CurrentQuestion.ID,
 				Question:  h.GameState.CurrentQuestion.Question,
 				Options:   h.GameState.CurrentQuestion.Options,
 				TimeLimit: h.GameState.CurrentQuestion.TimeLimit,
 				StartTime: h.GameState.QuestionStartTime.UnixMilli(),
 			}
-			state.CurrentQuestion = &questionForClient
 		}
 	}
 	
 	player.Send <- state
 }
 
-func (h *QuizHub) broadcastToPlayers(msg WSMessage) {
+func (h *QuizHub) broadcastToPlayers(msg interface{}) {
 	h.Mu.RLock()
 	defer h.Mu.RUnlock()
 	
@@ -607,7 +537,7 @@ func (h *QuizHub) broadcastToPlayers(msg WSMessage) {
 	}
 }
 
-func (h *QuizHub) notifyBroadcaster(msg WSMessage) {
+func (h *QuizHub) notifyBroadcaster(msg interface{}) {
 	h.Mu.RLock()
 	defer h.Mu.RUnlock()
 	
@@ -777,7 +707,7 @@ func ConnectQuizBroadcaster(hub *QuizHub, w http.ResponseWriter, r *http.Request
 	
 	broadcaster := &QuizBroadcaster{
 		Conn: conn,
-		Send: make(chan WSMessage, 64),
+		Send: make(chan interface{}, 64),
 	}
 	
 	hub.RegisterBroadcaster <- broadcaster
@@ -807,7 +737,7 @@ func ConnectQuizPlayer(hub *QuizHub, w http.ResponseWriter, r *http.Request, use
 		Username: username,
 		Email:    email,
 		Conn:     conn,
-		Send:     make(chan WSMessage, 64),
+		Send:     make(chan interface{}, 64),
 		IsActive: true,
 	}
 	
