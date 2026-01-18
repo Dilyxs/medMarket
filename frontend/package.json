@@ -11,6 +11,10 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.12",
     "@azure/openai": "^2.0.0",
+    "@solana/wallet-adapter-react": "^0.15.35",
+    "@solana/wallet-adapter-react-ui": "^0.9.35",
+    "@solana/wallet-adapter-wallets": "^0.19.32",
+    "@solana/web3.js": "^1.95.8",
     "ai": "^6.0.39",
     "bcryptjs": "^3.0.3",
     "jose": "^6.1.3",

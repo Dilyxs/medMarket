@@ -20,9 +20,6 @@ export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [assistantUnlocked, setAssistantUnlocked] = useState(false);
-  const assistantPriceSol = 0.4;
   const router = useRouter();
 
   useEffect(() => {
@@ -30,34 +27,17 @@ export default function Home() {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
         if (!res.ok) {
-          router.replace("/auth/sign-in");
+          setUser(null);
           return;
         }
         const data = await res.json();
-        if (data?.user) {
-          setUser(data.user);
-          setAuthChecked(true);
-        } else {
-          router.replace("/auth/sign-in");
-        }
+        setUser(data.user || null);
       } catch {
-        router.replace("/auth/sign-in");
+        setUser(null);
       }
     };
     loadUser();
-  }, [router]);
-
-  // Persist assistant unlock state for the session
-  useEffect(() => {
-    const stored = sessionStorage.getItem("assistantUnlocked");
-    if (stored === "true") setAssistantUnlocked(true);
   }, []);
-
-  const handleUnlockAssistant = async () => {
-    // TODO: integrate payment of 0.40 SOL here
-    setAssistantUnlocked(true);
-    sessionStorage.setItem("assistantUnlocked", "true");
-  };
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -71,11 +51,6 @@ export default function Home() {
     if (user?.email) return user.email.slice(0, 1).toUpperCase();
     return "";
   }, [user]);
-
-  if (!authChecked) {
-    // Prevent any protected content from rendering until auth is confirmed
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -145,34 +120,17 @@ export default function Home() {
 
         {/* Bottom Right - AI Assistant */}
         <div className="relative bg-card p-4 overflow-hidden">
-          <div className={assistantUnlocked ? "" : "pointer-events-none blur-sm"}>
-            {isChatOpen && (
-              <ChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(false)} />
-            )}
-            {!isChatOpen && (
-              <button
-                onClick={() => setIsChatOpen(true)}
-                className="absolute bottom-4 right-4 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition z-40"
-                aria-label="Open chat"
-              >
-                <MessageCircleIcon size={24} />
-              </button>
-            )}
-          </div>
-
-          {!assistantUnlocked && (
-            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm border border-border rounded-md flex items-center justify-center z-50">
-              <div className="text-center space-y-3 p-4">
-                <div className="text-lg font-semibold text-foreground">MedMarket Assistant</div>
-                <div className="text-sm text-muted-foreground">Unlock for {assistantPriceSol.toFixed(2)} SOL per game</div>
-                <Button
-                  onClick={handleUnlockAssistant}
-                  className="px-5 py-2 font-semibold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg shadow-lg"
-                >
-                  Unlock for {assistantPriceSol.toFixed(2)} SOL
-                </Button>
-              </div>
-            </div>
+          {isChatOpen && (
+            <ChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(false)} />
+          )}
+          {!isChatOpen && (
+            <button
+              onClick={() => setIsChatOpen(true)}
+              className="absolute bottom-4 right-4 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition z-40"
+              aria-label="Open chat"
+            >
+              <MessageCircleIcon size={24} />
+            </button>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"net/http"
 
@@ -18,6 +19,12 @@ func main() {
 	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
 		pkg.ServeChat(chatHub, w, r)
 	})
+	go broadcastServerHub.StartHubWork()
+
+	// Chat hub
+	chatHub := pkg.NewChatHub()
+	go chatHub.Start()
+
 	http.HandleFunc("/broadcaster", func(w http.ResponseWriter, r *http.Request) {
 		pkg.ConnectBroadCaster(broadcastServerHub, w, r)
 	})
@@ -27,4 +34,15 @@ func main() {
 		pkg.AddNewUserViewerToHub(broadcastServerHub, w, r, id)
 	})
 	http.ListenAndServe(":8080", nil)
+	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
+		clientID := fmt.Sprintf("client-%d-%d", rand.Intn(1000000), rand.Intn(1000000))
+		pkg.AddChatClient(chatHub, w, r, clientID)
+	})
+	http.HandleFunc("/verify_deposit", pkg.VerifyDeposit)
+
+	fmt.Println("medMarket backend server running on :8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		fmt.Printf("Server error: %v\n", err)
+	}
 }

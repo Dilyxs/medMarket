@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChatWidget } from "@/components/chat-widget";
-import { LiveBroadcastViewer } from "@/components/live-broadcast";
+// import { LiveBroadcastViewer } from "@/components/live-broadcast";
+import VideoBroadcaster from "@/components/video-broadcaster";
 import { LiveChatPanel } from "@/components/live-chat";
-import { BettingPanel } from "@/components/betting-panel";
+import { SolanaDeposit } from "@/components/solana-deposit";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
 
@@ -20,9 +21,6 @@ export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [assistantUnlocked, setAssistantUnlocked] = useState(false);
-  const assistantPriceSol = 0.4;
   const router = useRouter();
 
   useEffect(() => {
@@ -30,34 +28,17 @@ export default function Home() {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
         if (!res.ok) {
-          router.replace("/auth/sign-in");
+          setUser(null);
           return;
         }
         const data = await res.json();
-        if (data?.user) {
-          setUser(data.user);
-          setAuthChecked(true);
-        } else {
-          router.replace("/auth/sign-in");
-        }
+        setUser(data.user || null);
       } catch {
-        router.replace("/auth/sign-in");
+        setUser(null);
       }
     };
     loadUser();
-  }, [router]);
-
-  // Persist assistant unlock state for the session
-  useEffect(() => {
-    const stored = sessionStorage.getItem("assistantUnlocked");
-    if (stored === "true") setAssistantUnlocked(true);
   }, []);
-
-  const handleUnlockAssistant = async () => {
-    // TODO: integrate payment of 0.40 SOL here
-    setAssistantUnlocked(true);
-    sessionStorage.setItem("assistantUnlocked", "true");
-  };
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -71,11 +52,6 @@ export default function Home() {
     if (user?.email) return user.email.slice(0, 1).toUpperCase();
     return "";
   }, [user]);
-
-  if (!authChecked) {
-    // Prevent any protected content from rendering until auth is confirmed
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -127,52 +103,53 @@ export default function Home() {
       </header>
 
       {/* Main Content - 4 corners */}
-      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3.5fr_1.5fr] gap-0 h-[calc(100vh-73px)] overflow-hidden">
-        {/* Top Left - Live Viewer */}
-        <div className="bg-card flex items-center justify-center border-r border-b border-border p-4 overflow-hidden">
-          <LiveBroadcastViewer />
+      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3.5fr_1.5fr] gap-0 h-[calc(100vh-73px)]">
+        {/* Top Left - Live Viewer and Broadcaster */}
+        <div className="bg-card flex items-center justify-center gap-4 border-r border-b border-border p-4">
+          <div className="flex-1 flex items-center justify-center">
+            <VideoBroadcaster />
+          </div>
+          {/* <div className="flex-1 flex items-center justify-center">
+            <LiveBroadcastViewer />
+          </div> */}
         </div>
 
         {/* Top Right - Live Chat */}
-        <div className="bg-card border-b border-border p-4 overflow-hidden flex flex-col">
+        <div className="bg-card border-b border-border p-4">
           <LiveChatPanel />
         </div>
 
         {/* Bottom Left - Place Your Bets */}
-        <div className="bg-card border-r border-border p-6 overflow-hidden">
-          <BettingPanel />
+        <div className="bg-card border-r border-border p-6 flex flex-col gap-4 overflow-y-auto">
+          <h2 className="text-xl font-semibold text-foreground">Place your bets</h2>
+          <div className="flex-1 flex flex-col gap-3 justify-center">
+            <button className="w-full px-4 py-3 text-base font-medium bg-green-600 hover:bg-green-700 text-white rounded-md">
+              Bet High
+            </button>
+            <button className="w-full px-4 py-3 text-base font-medium bg-red-600 hover:bg-red-700 text-white rounded-md">
+              Bet Low
+            </button>
+          </div>
+          
+          {/* Solana Deposit */}
+          <div className="border-t border-border pt-4">
+            <SolanaDeposit />
+          </div>
         </div>
 
         {/* Bottom Right - AI Assistant */}
-        <div className="relative bg-card p-4 overflow-hidden">
-          <div className={assistantUnlocked ? "" : "pointer-events-none blur-sm"}>
-            {isChatOpen && (
-              <ChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(false)} />
-            )}
-            {!isChatOpen && (
-              <button
-                onClick={() => setIsChatOpen(true)}
-                className="absolute bottom-4 right-4 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition z-40"
-                aria-label="Open chat"
-              >
-                <MessageCircleIcon size={24} />
-              </button>
-            )}
-          </div>
-
-          {!assistantUnlocked && (
-            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm border border-border rounded-md flex items-center justify-center z-50">
-              <div className="text-center space-y-3 p-4">
-                <div className="text-lg font-semibold text-foreground">MedMarket Assistant</div>
-                <div className="text-sm text-muted-foreground">Unlock for {assistantPriceSol.toFixed(2)} SOL per game</div>
-                <Button
-                  onClick={handleUnlockAssistant}
-                  className="px-5 py-2 font-semibold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg shadow-lg"
-                >
-                  Unlock for {assistantPriceSol.toFixed(2)} SOL
-                </Button>
-              </div>
-            </div>
+        <div className="relative bg-card p-4">
+          {isChatOpen && (
+            <ChatWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(false)} />
+          )}
+          {!isChatOpen && (
+            <button
+              onClick={() => setIsChatOpen(true)}
+              className="absolute bottom-4 right-4 p-4 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition z-40"
+              aria-label="Open chat"
+            >
+              <MessageCircleIcon size={24} />
+            </button>
           )}
         </div>
       </div>

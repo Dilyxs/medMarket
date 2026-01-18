@@ -18,9 +18,13 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [name, setName] = useState("");
   const [newsletter, setNewsletter] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawWallet, setWithdrawWallet] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -38,6 +42,13 @@ export default function SettingsPage() {
         setUser(u);
         setName(u?.name || "");
         setNewsletter(Boolean(u?.newsletter));
+
+        // Load balance
+        const balanceRes = await fetch("/api/balance", { credentials: "include" });
+        if (balanceRes.ok) {
+          const balanceData = await balanceRes.json();
+          setBalance(balanceData.balance || 0);
+        }
       } catch {
         router.push("/auth/sign-in");
       } finally {
@@ -90,6 +101,56 @@ export default function SettingsPage() {
     }
   };
 
+  const handleWithdraw = async () => {
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      setError("Please enter a valid amount");
+      return;
+    }
+    if (parseFloat(withdrawAmount) > balance) {
+      setError("Insufficient balance");
+      return;
+    }
+    if (!withdrawWallet || withdrawWallet.trim() === "") {
+      setError("Please enter a wallet address");
+      return;
+    }
+
+    setWithdrawing(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          amount: parseFloat(withdrawAmount),
+          walletAddress: withdrawWallet.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to withdraw");
+      } else {
+        setMessage(`Withdrawal request submitted: ${withdrawAmount} SOL to ${withdrawWallet}`);
+        setWithdrawAmount("");
+        setWithdrawWallet("");
+        // Refresh balance
+        const balanceRes = await fetch("/api/balance", { credentials: "include" });
+        if (balanceRes.ok) {
+          const balanceData = await balanceRes.json();
+          setBalance(balanceData.balance || 0);
+        }
+      }
+    } catch {
+      setError("Unexpected error");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
@@ -104,6 +165,52 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Account settings</h1>
           <p className="text-sm text-muted-foreground">Update your profile or delete your account.</p>
+        </div>
+
+        {/* Balance Section */}
+        <div className="space-y-4 rounded-lg border border-border bg-card p-6">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground mb-2">Account Balance</h2>
+            <div className="text-3xl font-bold text-foreground mb-1">
+              {balance.toFixed(4)} SOL
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This is the balance the web app owes you from your winnings. You can withdraw at any time.
+            </p>
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="withdrawAmount">Withdraw Amount (SOL)</Label>
+              <Input
+                id="withdrawAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="withdrawWallet">Solana Wallet Address</Label>
+              <Input
+                id="withdrawWallet"
+                placeholder="Enter your Solana wallet address"
+                value={withdrawWallet}
+                onChange={(e) => setWithdrawWallet(e.target.value)}
+              />
+            </div>
+
+            <Button
+              onClick={handleWithdraw}
+              disabled={withdrawing || !withdrawAmount || !withdrawWallet}
+              className="w-full"
+            >
+              {withdrawing ? "Processing..." : "Withdraw"}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4 rounded-lg border border-border bg-card p-6">
