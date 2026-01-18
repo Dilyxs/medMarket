@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/mongo";
+import { createSessionCookie, signSession } from "@/lib/auth";
+import { ObjectId } from "mongodb";
 
 interface SigninBody {
   email?: string;
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const users = db.collection("users");
 
-    const user = await users.findOne<{ passwordHash: string }>({ email });
+    const user = await users.findOne<{ _id: ObjectId; passwordHash: string; name?: string | null }>({ email });
     if (!user) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
@@ -30,7 +32,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    return NextResponse.json({ message: "Signed in" }, { status: 200 });
+    const token = await signSession({
+      userId: user._id.toString(),
+      email,
+      name: user.name || null,
+    });
+
+    const res = NextResponse.json({ message: "Signed in" }, { status: 200 });
+    res.headers.set("Set-Cookie", createSessionCookie(token));
+    return res;
   } catch (error) {
     console.error("Signin error", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

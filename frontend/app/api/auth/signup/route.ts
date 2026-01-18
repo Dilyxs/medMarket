@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/mongo";
+import { createSessionCookie, signSession } from "@/lib/auth";
 
 interface SignupBody {
   email?: string;
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    await users.insertOne({
+    const insert = await users.insertOne({
       email,
       passwordHash,
       name: name || null,
@@ -43,7 +44,15 @@ export async function POST(request: Request) {
       createdAt: new Date(),
     });
 
-    return NextResponse.json({ message: "User created" }, { status: 201 });
+    const token = await signSession({
+      userId: insert.insertedId.toString(),
+      email,
+      name: name || null,
+    });
+
+    const res = NextResponse.json({ message: "User created" }, { status: 201 });
+    res.headers.set("Set-Cookie", createSessionCookie(token));
+    return res;
   } catch (error) {
     console.error("Signup error", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

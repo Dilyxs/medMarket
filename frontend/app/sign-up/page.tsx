@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, JSX, SVGProps, useState } from "react";
 
 const Logo = (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
@@ -39,6 +40,7 @@ export default function SignUp() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -58,7 +60,8 @@ export default function SignUp() {
       if (!res.ok) {
         setError(data.error || "Unable to sign up");
       } else {
-        setMessage("Account created. You can now sign in.");
+        setMessage("Account created. Redirecting...");
+        router.push("/");
       }
     } catch (err) {
       setError("Unexpected error. Please try again.");
@@ -219,10 +222,7 @@ export default function SignUp() {
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link
-            href="/"
-            className="font-medium text-primary hover:text-primary/90"
-          >
+          <Link href="/auth/sign-in" className="font-medium text-primary hover:text-primary/90">
             Sign in
           </Link>
         </p>
