@@ -5,10 +5,12 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 interface VideoFrameWithAnnotations {
   frame: string;
-  analysis: {
-    frame_index: number;
-    masks_detected: number;
-    regions: [];
+  hasRectangle: boolean;
+  rectangle: {
+    x1: number;
+    x2: number;
+    y1: number;
+    y2: number;
   };
 }
 
@@ -29,6 +31,7 @@ export default function VideoBroadcaster() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentPoint, setCurrentPoint] = useState<{ x: number; y: number } | null>(null);
+  const [rectangle, setRectangle] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const connectWebSocket = () => {
@@ -134,11 +137,8 @@ export default function VideoBroadcaster() {
 
           const frameData: VideoFrameWithAnnotations = {
             frame: base64Frame,
-            analysis: {
-              frame_index: frameIndexRef.current,
-              masks_detected: 0,
-              regions: [],
-            },
+            hasRectangle: rectangle !== null,
+            rectangle: rectangle || { x1: 0, y1: 0, x2: 0, y2: 0 },
           };
 
           try {
@@ -253,7 +253,6 @@ export default function VideoBroadcaster() {
       y1,
       x2,
       y2,
-      timestamp: Date.now()
     };
 
     try {
