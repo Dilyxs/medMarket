@@ -1,6 +1,6 @@
 module github.com/dilyxs/medMarket
 
-go 1.25.5
+go 1.21.0
 
 require (
 	github.com/gagliardetto/solana-go v1.14.0

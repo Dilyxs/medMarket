@@ -85,9 +85,10 @@ export function SolanaDeposit() {
 
       const result = await response.json();
       setMessage(`✓ Deposit successful! Credited: ${result.credited_lamports / LAMPORTS_PER_SOL} SOL`);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Deposit error:", error);
-      setMessage(`Error: ${error.message || "Transaction failed"}`);
+      const msg = error instanceof Error ? error.message : "Transaction failed";
+      setMessage(`Error: ${msg}`);
     } finally {
       setIsDepositing(false);
     }

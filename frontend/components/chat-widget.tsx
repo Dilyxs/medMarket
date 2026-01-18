@@ -70,8 +70,8 @@ export function ChatWidget({ isOpen, onToggle, className }: ChatWidgetProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm">
-            <p className="mt-8">Welcome! I'm here to help you understand your medical market data.</p>
-            <p className="mt-4">Describe what you see on your screen, and I'll ask clarifying questions to better assist you.</p>
+            <p className="mt-8">Welcome! I&apos;m here to help you understand your medical market data.</p>
+            <p className="mt-4">Describe what you see on your screen, and I&apos;ll ask clarifying questions to better assist you.</p>
           </div>
         ) : (
           messages.map((message, i) => (

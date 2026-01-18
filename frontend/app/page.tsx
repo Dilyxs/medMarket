@@ -58,6 +58,12 @@ export default function Home() {
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div className="text-lg font-semibold text-foreground">medmarket</div>
         <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={() => router.push("/broadcast")}>
+             Broadcast
+          </Button>
+           <Button variant="ghost" onClick={() => router.push("/viewer")}>
+             Viewer
+          </Button>
           {user ? (
             <div className="relative">
               <button

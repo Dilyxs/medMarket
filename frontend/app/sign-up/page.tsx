@@ -63,7 +63,7 @@ export default function SignUp() {
         setMessage("Account created. Redirecting...");
         router.push("/");
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Unexpected error. Please try again.");
     } finally {
       setSubmitting(false);

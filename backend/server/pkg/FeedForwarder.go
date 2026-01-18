@@ -55,8 +55,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  128 * 128,
+	WriteBufferSize: 128 * 128,
 }
 
 type BroadcastServerHub struct {
@@ -141,9 +141,11 @@ func (b *BroadcastServerHub) EnndBroadcastingSession() {
 }
 
 func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.Request) {
+	fmt.Println("ConnectBroadCaster: Incoming connection...")
 	w.Header().Set("Content-Type", "application/json")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		fmt.Printf("ConnectBroadCaster: Upgrade failed: %v\n", err)
 		w.WriteHeader(http.StatusUpgradeRequired)
 		if _, ConnErr := w.Write([]byte(`{"error": "WebSocket upgrade failed"}`)); ConnErr != nil { // this happens cause user left the page or something
 			hub.EndOFStream <- true
@@ -161,17 +163,26 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 		Conn:                    conn,
 		UserReadingVideoDetails: make(chan VideoFrameWithAnnotations, 1000),
 	}
+	fmt.Println("ConnectBroadCaster: Connected successfully. Starting listener.")
 	Broadcaster.ListenForVideoInput(hub)
 }
 
 func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
+	fmt.Println("ListenForVideoInput: Started loop")
 	for {
 		var newMessage VideoFrameWithAnnotations
 		err := b.Conn.ReadJSON(&newMessage)
 		if err != nil {
+			fmt.Printf("ListenForVideoInput: ReadJSON Error: %v\n", err)
 			fmt.Println("cannot decode video")
 			hub.EndOFStream <- true
 			return
+		}
+		// fmt.Printf("ListenForVideoInput: Received frame. Bytes: %d\n", len(newMessage.Frame))
+		if len(newMessage.Frame) > 0 {
+			fmt.Printf("Backend: Received frame of size %d bytes. Analysis: %d masks, FrameIndex: %d\n", len(newMessage.Frame), newMessage.Analysis.MasksDetected, newMessage.Analysis.FrameIndex)
+		} else {
+			fmt.Println("Backend: Received empty frame")
 		}
 		hub.VideoDetailsChan <- newMessage
 	}
@@ -179,6 +190,7 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 
 func (b *BroadcastServerHub) ShareBroadscastingDetails() {
 	for message := range b.VideoDetailsChan {
+		// fmt.Println("ShareBroadscastingDetails: Broadcasting message to viewers...")
 		b.Mu.RLock()
 		for _, viewer := range b.Viewers {
 			select {

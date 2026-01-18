@@ -1,0 +1,29 @@
+INFO:     Started server process [34907]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:app:Starting session 0fe7ade5-23ed-48c7-a4d8-057809a64aae with bboxes [[423.40125391849523, 35.33519553072625, 473.40125391849523, 85.33519553072625]]
+
+WARNING ⚠️ imgsz=[1024] must be multiple of max stride 14, updating to [1036]
+0: 1036x1036 (no detections), 9304.1ms
+Speed: 9.0ms preprocess, 9304.1ms inference, 3.2ms postprocess per image at shape (1, 3, 1036, 1036)
+INFO:     127.0.0.1:56090 - "POST /stream/start HTTP/1.1" 200 OK
+INFO:app:Starting session f40a6f1e-d339-4b4c-b21a-25be06c5be3c with bboxes [[423.40125391849523, 35.33519553072625, 473.40125391849523, 85.33519553072625]]
+
+WARNING ⚠️ imgsz=[1024] must be multiple of max stride 14, updating to [1036]
+0: 1036x1036 1 0, 10112.1ms
+Speed: 16.0ms preprocess, 10112.1ms inference, 3.8ms postprocess per image at shape (1, 3, 1036, 1036)
+INFO:     127.0.0.1:56152 - "POST /stream/start HTTP/1.1" 200 OK
+INFO:app:Starting session 6257f8f1-926a-477f-a76b-fd923aa5c03a with bboxes [[29.404842442585007, 19.156726986624705, 79.40484244258501, 69.1567269866247]]
+
+WARNING ⚠️ imgsz=[1024] must be multiple of max stride 14, updating to [1036]
+0: 1036x1036 1 0, 7503.6ms
+Speed: 14.2ms preprocess, 7503.6ms inference, 4.0ms postprocess per image at shape (1, 3, 1036, 1036)
+INFO:     127.0.0.1:56361 - "POST /stream/start HTTP/1.1" 200 OK
+INFO:app:Starting session 7383c85f-970a-406c-863e-305a080531ad with bboxes [[26.533558839238026, 11.833988985051143, 76.53355883923803, 61.83398898505114]]
+
+WARNING ⚠️ imgsz=[1024] must be multiple of max stride 14, updating to [1036]
+0: 1036x1036 1 0, 7340.1ms
+Speed: 24.7ms preprocess, 7340.1ms inference, 3.4ms postprocess per image at shape (1, 3, 1036, 1036)
+INFO:     127.0.0.1:56406 - "POST /stream/start HTTP/1.1" 200 OK
+./run.sh: line 2: 34907 Killed: 9               /Library/Frameworks/Python.framework/Versions/3.11/bin/python3 -m uvicorn app:app --host 0.0.0.0 --port 8000

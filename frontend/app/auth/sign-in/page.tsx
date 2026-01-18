@@ -66,7 +66,7 @@ export default function SignIn() {
         setMessage("Signed in successfully.");
         router.push("/");
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Unexpected error. Please try again.");
     } finally {
       setSubmitting(false);
