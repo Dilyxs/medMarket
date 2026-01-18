@@ -86,6 +86,7 @@ type BroadcastServerHub struct {
 	EndOFStream                           chan bool
 	ListenForIncomingUserOrDisconnections chan *UserViewerAddition
 	QandAnswer                            chan QandAnswer
+	QandAnswerEvaluator                   chan UserResponseForHub
 	Mu                                    sync.RWMutex
 }
 type UserViewerAddition struct {
