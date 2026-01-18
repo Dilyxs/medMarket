@@ -182,7 +182,7 @@ async def start_stream(
              raise HTTPException(status_code=400, detail="Invalid image file")
 
         # Run inference on first frame with prompts using global model
-        results = sam_model(frame0, bboxes=bboxes_list)
+        results = sam_model(frame0, bboxes=bboxes_list, imgsz=140)
         
         # Extract data
         result_data = extract_regions(results[0], frame_index=0)
@@ -264,7 +264,7 @@ async def process_frame(
              }
 
         # Run predict with propagated bboxes using global model
-        results = sam_model(frame, bboxes=current_bboxes)
+        results = sam_model(frame, bboxes=current_bboxes, imgsz=140)
         
         # Extract data
         result_data = extract_regions(results[0], frame_index=current_idx)
