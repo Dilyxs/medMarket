@@ -3,10 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChatWidget } from "@/components/chat-widget";
-// import { LiveBroadcastViewer } from "@/components/live-broadcast";
-import VideoBroadcaster from "@/components/video-broadcaster";
+import { LiveBroadcastViewer } from "@/components/live-broadcast";
 import { LiveChatPanel } from "@/components/live-chat";
-import { SolanaDeposit } from "@/components/solana-deposit";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
 
@@ -104,14 +102,9 @@ export default function Home() {
 
       {/* Main Content - 4 corners */}
       <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3.5fr_1.5fr] gap-0 h-[calc(100vh-73px)]">
-        {/* Top Left - Live Viewer and Broadcaster */}
-        <div className="bg-card flex items-center justify-center gap-4 border-r border-b border-border p-4">
-          <div className="flex-1 flex items-center justify-center">
-            <VideoBroadcaster />
-          </div>
-          {/* <div className="flex-1 flex items-center justify-center">
-            <LiveBroadcastViewer />
-          </div> */}
+        {/* Top Left - Live Viewer */}
+        <div className="bg-card flex items-center justify-center border-r border-b border-border p-4">
+          <LiveBroadcastViewer />
         </div>
 
         {/* Top Right - Live Chat */}
@@ -120,7 +113,7 @@ export default function Home() {
         </div>
 
         {/* Bottom Left - Place Your Bets */}
-        <div className="bg-card border-r border-border p-6 flex flex-col gap-4 overflow-y-auto">
+        <div className="bg-card border-r border-border p-6 flex flex-col gap-4">
           <h2 className="text-xl font-semibold text-foreground">Place your bets</h2>
           <div className="flex-1 flex flex-col gap-3 justify-center">
             <button className="w-full px-4 py-3 text-base font-medium bg-green-600 hover:bg-green-700 text-white rounded-md">
@@ -129,11 +122,6 @@ export default function Home() {
             <button className="w-full px-4 py-3 text-base font-medium bg-red-600 hover:bg-red-700 text-white rounded-md">
               Bet Low
             </button>
-          </div>
-          
-          {/* Solana Deposit */}
-          <div className="border-t border-border pt-4">
-            <SolanaDeposit />
           </div>
         </div>
 
