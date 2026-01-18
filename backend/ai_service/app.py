@@ -39,9 +39,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global model instance (loaded at startup)
+sam_model = None
+model_loaded = False
+
 # Global session storage
-# sessions[session_id] = { "model": model_instance, "frame_index": int }
+# sessions[session_id] = { "frame_index": int, "current_bboxes": list }
+# Note: model is now global, not per-session
 sessions: Dict[str, Any] = {}
+
+@app.on_event("startup")
+async def load_model():
+    """Load SAM3 model at application startup to save time on first request"""
+    global sam_model, model_loaded
+    model_path = os.path.join(os.path.dirname(__file__), "sam3.pt")
+    if not os.path.exists(model_path):
+        logger.error(f"Model file not found at {model_path}")
+        model_loaded = False
+        return
+    
+    try:
+        logger.info("Loading SAM3 model at startup...")
+        sam_model = SAM(model_path)
+        model_loaded = True
+        logger.info("SAM3 model loaded successfully!")
+    except Exception as e:
+        logger.error(f"Failed to load SAM3 model: {e}")
+        model_loaded = False
 
 # Helper function to extract regions (User's logic)
 def extract_regions(result, frame_index: int) -> Dict[str, Any]:
@@ -102,6 +126,14 @@ def load_image_from_upload(upload_file: UploadFile):
 async def root():
     return {"message": "SAM3 Streaming API is running"}
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint that returns model loading status"""
+    return {
+        "status": "ready" if model_loaded else "not_ready",
+        "model_loaded": model_loaded
+    }
+
 @app.post("/stream/start")
 async def start_stream(
     image: UploadFile = File(...),
@@ -111,6 +143,9 @@ async def start_stream(
     Start a new segmentation session with the first frame and bounding boxes.
     Returns a session_id.
     """
+    if not model_loaded or sam_model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
+    
     try:
         bboxes_list = json.loads(bboxes)
     except Exception:
@@ -119,22 +154,14 @@ async def start_stream(
     session_id = str(uuid.uuid4())
     logger.info(f"Starting session {session_id} with bboxes {bboxes_list}")
 
-    # Load Model
-    model_path = os.path.join(os.path.dirname(__file__), "sam3.pt")
-    if not os.path.exists(model_path):
-        raise HTTPException(status_code=500, detail="Model sam3.pt not found")
-
     try:
-        model = SAM(model_path)
-        
         # decode image
         frame0 = load_image_from_upload(image)
         if frame0 is None:
              raise HTTPException(status_code=400, detail="Invalid image file")
 
-        # Run inference on first frame with prompts
-        # persist=True removed as it causes errors with SAM
-        results = model(frame0, bboxes=bboxes_list)
+        # Run inference on first frame with prompts using global model
+        results = sam_model(frame0, bboxes=bboxes_list)
         
         # Extract data
         result_data = extract_regions(results[0], frame_index=0)
@@ -148,18 +175,11 @@ async def start_stream(
                 bbox["x_min"], bbox["y_min"], bbox["x_max"], bbox["y_max"]
             ])
             
-        # If no regions found, we might lose tracking.
-        # Fallback to original bboxes if detection failed? Or track nothing.
-        # Ideally if lost, we keep looking at the same spot or stop.
-        # We'll use the original ones if nothing found, hoping it reappears? 
-        # Or empty list. Let's use empty list to signify "lost".
         if not next_bboxes:
              logger.warning("No masks found in first frame, tracking might fail")
-             # next_bboxes = bboxes_list # Optional: retry with original
 
-        # Save session
+        # Save session (no longer storing model per-session)
         sessions[session_id] = {
-            "model": model,
             "frame_index": 0,
             "current_bboxes": next_bboxes
         }
@@ -184,11 +204,13 @@ async def process_frame(
     """
     Process a subsequent frame in the session.
     """
+    if not model_loaded or sam_model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
+    
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
     session = sessions[session_id]
-    model = session["model"]
     current_bboxes = session.get("current_bboxes", [])
     
     session["frame_index"] += 1
@@ -211,8 +233,8 @@ async def process_frame(
                  "message": "No tracking target (object lost)"
              }
 
-        # Run predict with propagated bboxes
-        results = model(frame, bboxes=current_bboxes)
+        # Run predict with propagated bboxes using global model
+        results = sam_model(frame, bboxes=current_bboxes)
         
         # Extract data
         result_data = extract_regions(results[0], frame_index=current_idx)

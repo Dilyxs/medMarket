@@ -1,18 +1,35 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
+	"os"
 
 	"github.com/dilyxs/medMarket/pkg"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	broadcastServerHub := pkg.NewBroadcastServerHub()
+	// Load environment variables
+	if err := godotenv.Load("../.env"); err != nil {
+		log.Printf("Warning: Error loading .env file: %v", err)
+	}
+
+	// Get AI service URL from environment (with fallback)
+	aiServiceURL := os.Getenv("AI_SERVICE_URL")
+	if aiServiceURL == "" {
+		aiServiceURL = "http://localhost:8000"
+		log.Printf("AI_SERVICE_URL not set, using default: %s", aiServiceURL)
+	}
+
+	broadcastServerHub := pkg.NewBroadcastServerHub(aiServiceURL)
 	chatHub := pkg.NewChatServerHub()
 	chatHub.Run()
 	go broadcastServerHub.StartHubWork()
+
+	log.Printf("Starting server on :8080 with AI service at %s", aiServiceURL)
+
 	http.HandleFunc("/startgame", func(w http.ResponseWriter, r *http.Request) {
 		pkg.
 	})

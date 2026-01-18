@@ -1,9 +1,12 @@
 package pkg
 
 import (
+	"encoding/base64"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -87,6 +90,10 @@ type BroadcastServerHub struct {
 	ListenForIncomingUserOrDisconnections chan *UserViewerAddition
 	QandAnswer                            chan QandAnswer
 	Mu                                    sync.RWMutex
+	// AI service integration fields
+	AIServiceURL   string
+	CurrentSession string
+	AIClient       *AIServiceClient
 }
 type UserViewerAddition struct {
 	User       *UserViewer
@@ -154,9 +161,19 @@ func (v *UserViewer) ListenForVideoDetails() {
 
 func (b *BroadcastServerHub) EnndBroadcastingSession() {
 	for range b.EndOFStream {
+		// Clean up AI session
+		if b.CurrentSession != "" {
+			log.Printf("Cleaning up AI session: %s", b.CurrentSession)
+			if err := b.AIClient.EndSession(b.CurrentSession); err != nil {
+				log.Printf("Error ending AI session: %v", err)
+			}
+			b.CurrentSession = ""
+		}
+
+		// Notify all viewers
 		b.Mu.RLock()
 		for _, viewer := range b.Viewers {
-			if err := viewer.Conn.WriteMessage(websocket.TextMessage, []byte("stream has ended")); err != nil { // happens if user
+			if err := viewer.Conn.WriteMessage(websocket.TextMessage, []byte("stream has ended")); err != nil {
 				continue
 			}
 		}
@@ -169,12 +186,20 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusUpgradeRequired)
-		if _, ConnErr := w.Write([]byte(`{"error": "WebSocket upgrade failed"}`)); ConnErr != nil { // this happens cause user left the page or something
+		if _, ConnErr := w.Write([]byte(`{"error": "WebSocket upgrade failed"}`)); ConnErr != nil {
 			hub.EndOFStream <- true
 		}
 	}
 	defer func() {
 		conn.Close()
+		// Clean up AI session on broadcaster disconnect
+		if hub.CurrentSession != "" {
+			log.Printf("Broadcaster disconnected, cleaning up AI session: %s", hub.CurrentSession)
+			if err := hub.AIClient.EndSession(hub.CurrentSession); err != nil {
+				log.Printf("Error ending AI session: %v", err)
+			}
+			hub.CurrentSession = ""
+		}
 		select {
 		case hub.EndOFStream <- true:
 		default:
@@ -197,11 +222,71 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 			hub.EndOFStream <- true
 			return
 		}
-		if !newMessage.HasRectangle {
-			hub.VideoDetailsChan <- VideoFrameWithAnnotations{Frame: newMessage.Frame, Metadata: AnnotationMetadata{}}
-		} else {
+
+		// Decode base64 frame to raw bytes
+		frameBytes, decodeErr := base64.StdEncoding.DecodeString(string(newMessage.Frame))
+		if decodeErr != nil {
+			log.Printf("Failed to decode base64 frame: %v", decodeErr)
+			// Send frame with empty metadata on decode error
+			hub.VideoDetailsChan <- VideoFrameWithAnnotations{
+				Frame:    newMessage.Frame,
+				Metadata: AnnotationMetadata{},
+			}
+			continue
 		}
-		// hub.VideoDetailsChan <- newMessage
+
+		if !newMessage.HasRectangle {
+			// No annotation - pass frame through with empty metadata
+			hub.VideoDetailsChan <- VideoFrameWithAnnotations{
+				Frame:    newMessage.Frame,
+				Metadata: AnnotationMetadata{},
+			}
+		} else {
+			// Frame has annotation - process with AI service
+			var metadata AnnotationMetadata
+
+			if hub.CurrentSession == "" {
+				// First annotated frame - start new session
+				log.Printf("Starting new AI tracking session with bbox: x1=%.2f, y1=%.2f, x2=%.2f, y2=%.2f",
+					newMessage.RectangleData.X1, newMessage.RectangleData.Y1,
+					newMessage.RectangleData.X2, newMessage.RectangleData.Y2)
+
+				sessionID, frameData, err := hub.AIClient.StartSegmentationSession(
+					string(newMessage.Frame),
+					newMessage.RectangleData,
+				)
+
+				if err != nil {
+					log.Printf("AI service error starting session: %v", err)
+					// Graceful degradation - send frame with empty metadata
+					metadata = AnnotationMetadata{}
+				} else {
+					hub.CurrentSession = sessionID
+					metadata = frameData
+					log.Printf("AI session started: %s with %d regions detected", sessionID, frameData.MasksDetected)
+				}
+			} else {
+				// Subsequent frame - continue tracking
+				frameData, err := hub.AIClient.ProcessFrameStreaming(
+					hub.CurrentSession,
+					string(newMessage.Frame),
+				)
+
+				if err != nil {
+					log.Printf("AI service error processing frame: %v", err)
+					// Graceful degradation - send frame with empty metadata
+					metadata = AnnotationMetadata{}
+				} else {
+					metadata = frameData
+				}
+			}
+
+			// Send frame with AI-generated metadata
+			hub.VideoDetailsChan <- VideoFrameWithAnnotations{
+				Frame:    newMessage.Frame,
+				Metadata: metadata,
+			}
+		}
 	}
 }
 
@@ -218,7 +303,7 @@ func (b *BroadcastServerHub) ShareBroadscastingDetails() {
 	}
 }
 
-func NewBroadcastServerHub() *BroadcastServerHub {
+func NewBroadcastServerHub(aiServiceURL string) *BroadcastServerHub {
 	return &BroadcastServerHub{
 		ValereRawVideoDetailsChan:             make(chan VideoFrameValere, 1000),
 		AcceptingUsers:                        true,
@@ -228,6 +313,9 @@ func NewBroadcastServerHub() *BroadcastServerHub {
 		ListenForIncomingUserOrDisconnections: make(chan *UserViewerAddition, 1000),
 		QandAnswer:                            make(chan QandAnswer, 100),
 		Mu:                                    sync.RWMutex{},
+		AIServiceURL:                          aiServiceURL,
+		CurrentSession:                        "",
+		AIClient:                              NewAIServiceClient(aiServiceURL, 10*time.Second),
 	}
 }
 
