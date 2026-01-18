@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChatWidget } from "@/components/chat-widget";
 import { LiveBroadcastViewer } from "@/components/live-broadcast";
 import { LiveChatPanel } from "@/components/live-chat";
+import { SolanaDeposit } from "@/components/solana-deposit";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
 
@@ -113,7 +114,7 @@ export default function Home() {
         </div>
 
         {/* Bottom Left - Place Your Bets */}
-        <div className="bg-card border-r border-border p-6 flex flex-col gap-4">
+        <div className="bg-card border-r border-border p-6 flex flex-col gap-4 overflow-y-auto">
           <h2 className="text-xl font-semibold text-foreground">Place your bets</h2>
           <div className="flex-1 flex flex-col gap-3 justify-center">
             <button className="w-full px-4 py-3 text-base font-medium bg-green-600 hover:bg-green-700 text-white rounded-md">
@@ -122,6 +123,11 @@ export default function Home() {
             <button className="w-full px-4 py-3 text-base font-medium bg-red-600 hover:bg-red-700 text-white rounded-md">
               Bet Low
             </button>
+          </div>
+          
+          {/* Solana Deposit */}
+          <div className="border-t border-border pt-4">
+            <SolanaDeposit />
           </div>
         </div>
 

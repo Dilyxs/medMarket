@@ -28,6 +28,7 @@ func main() {
 		clientID := fmt.Sprintf("client-%d-%d", rand.Intn(1000000), rand.Intn(1000000))
 		pkg.AddChatClient(chatHub, w, r, clientID)
 	})
+	http.HandleFunc("/verify_deposit", pkg.VerifyDeposit)
 
 	fmt.Println("medMarket backend server running on :8080")
 	err := http.ListenAndServe(":8080", nil)
