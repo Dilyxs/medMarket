@@ -1,8 +1,6 @@
 package pkg
 
 import (
-	"encoding/base64"
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -68,8 +66,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  1024 * 1024, // 1MB buffer for video frames
+	WriteBufferSize: 1024 * 1024, // 1MB buffer for video frames
 }
 
 type QandAnswer struct {
@@ -218,22 +216,12 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 		var newMessage VideoFrameValere
 		err := b.Conn.ReadJSON(&newMessage)
 		if err != nil {
-			fmt.Println("cannot decode video")
+			log.Printf("Error decoding video frame: %v", err)
 			hub.EndOFStream <- true
 			return
 		}
-
-		// Decode base64 frame to raw bytes
-		frameBytes, decodeErr := base64.StdEncoding.DecodeString(string(newMessage.Frame))
-		if decodeErr != nil {
-			log.Printf("Failed to decode base64 frame: %v", decodeErr)
-			// Send frame with empty metadata on decode error
-			hub.VideoDetailsChan <- VideoFrameWithAnnotations{
-				Frame:    newMessage.Frame,
-				Metadata: AnnotationMetadata{},
-			}
-			continue
-		}
+		
+		log.Printf("Received frame: size=%d bytes, hasRectangle=%v", len(newMessage.Frame), newMessage.HasRectangle)
 
 		if !newMessage.HasRectangle {
 			// No annotation - pass frame through with empty metadata
@@ -252,7 +240,7 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 					newMessage.RectangleData.X2, newMessage.RectangleData.Y2)
 
 				sessionID, frameData, err := hub.AIClient.StartSegmentationSession(
-					string(newMessage.Frame),
+					newMessage.Frame,
 					newMessage.RectangleData,
 				)
 
@@ -269,7 +257,7 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 				// Subsequent frame - continue tracking
 				frameData, err := hub.AIClient.ProcessFrameStreaming(
 					hub.CurrentSession,
-					string(newMessage.Frame),
+					newMessage.Frame,
 				)
 
 				if err != nil {

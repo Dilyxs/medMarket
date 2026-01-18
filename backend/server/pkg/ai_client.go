@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,13 +73,7 @@ func (c *AIServiceClient) CheckHealth() (*HealthResponse, error) {
 }
 
 // StartSegmentationSession starts a new tracking session with initial bounding box
-func (c *AIServiceClient) StartSegmentationSession(frameBase64 string, rectangle RectangleDataValere) (string, AnnotationMetadata, error) {
-	// Decode base64 frame to bytes
-	frameBytes, err := base64.StdEncoding.DecodeString(frameBase64)
-	if err != nil {
-		return "", AnnotationMetadata{}, fmt.Errorf("failed to decode base64 frame: %w", err)
-	}
-
+func (c *AIServiceClient) StartSegmentationSession(frameBytes []byte, rectangle RectangleDataValere) (string, AnnotationMetadata, error) {
 	// Convert rectangle to bbox format [[x1, y1, x2, y2]]
 	bboxes := [][]float64{{rectangle.X1, rectangle.Y1, rectangle.X2, rectangle.Y2}}
 	bboxesJSON, err := json.Marshal(bboxes)
@@ -134,13 +127,7 @@ func (c *AIServiceClient) StartSegmentationSession(frameBase64 string, rectangle
 }
 
 // ProcessFrameStreaming processes a frame in an existing session
-func (c *AIServiceClient) ProcessFrameStreaming(sessionID string, frameBase64 string) (AnnotationMetadata, error) {
-	// Decode base64 frame to bytes
-	frameBytes, err := base64.StdEncoding.DecodeString(frameBase64)
-	if err != nil {
-		return AnnotationMetadata{}, fmt.Errorf("failed to decode base64 frame: %w", err)
-	}
-
+func (c *AIServiceClient) ProcessFrameStreaming(sessionID string, frameBytes []byte) (AnnotationMetadata, error) {
 	// Create multipart form data
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)

@@ -30,9 +30,6 @@ func main() {
 
 	log.Printf("Starting server on :8080 with AI service at %s", aiServiceURL)
 
-	http.HandleFunc("/startgame", func(w http.ResponseWriter, r *http.Request) {
-		pkg.
-	})
 	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
 		pkg.ServeChat(chatHub, w, r)
 	})

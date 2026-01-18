@@ -22,7 +22,6 @@ func (b *Broadcaster) StartGame(w http.ResponseWriter, r *http.Request, hub *Bro
 	if err != nil {
 		w.WriteHeader(http.StatusUpgradeRequired)
 	}
-	var TotalCollectedSum float64 = 0
 	for {
 		var qa QandAnswer
 		err := conn.ReadJSON(&qa)

@@ -26,12 +26,14 @@ export default function VideoBroadcaster() {
   const [isReversing, setIsReversing] = useState(false);
   const frameIndexRef = useRef(0);
   const reconnectDelayRef = useRef(1000); // Start with 1 second
+  const reverseIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Drawing state
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentPoint, setCurrentPoint] = useState<{ x: number; y: number } | null>(null);
   const [rectangle, setRectangle] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const rectangleRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const connectWebSocket = () => {
@@ -80,23 +82,33 @@ export default function VideoBroadcaster() {
 
     if (!isReversing) {
       // Switch to reverse playback
-      video.playbackRate = -1;
       setIsReversing(true);
-      video.play();
+      video.pause();
+      
+      // Manually step backwards through the video
+      reverseIntervalRef.current = setInterval(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        
+        // Step back by ~33ms worth of video (assuming 30fps)
+        video.currentTime = Math.max(0, video.currentTime - 0.033);
+        
+        // If we've reached the beginning, switch back to forward
+        if (video.currentTime <= 0.1) {
+          if (reverseIntervalRef.current) {
+            clearInterval(reverseIntervalRef.current);
+            reverseIntervalRef.current = null;
+          }
+          setIsReversing(false);
+          video.currentTime = 0;
+          video.play();
+        }
+      }, 33); // 30fps
     }
   };
 
   const handleTimeUpdate = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    // If reversing and reached the start, switch to forward
-    if (isReversing && video.currentTime <= 0.1) {
-      video.playbackRate = 1;
-      setIsReversing(false);
-      video.currentTime = 0;
-      video.play();
-    }
+    // No longer needed for reverse detection
   };
 
   const captureAndSendFrame = () => {
@@ -135,13 +147,23 @@ export default function VideoBroadcaster() {
           // Remove the "data:image/jpeg;base64," prefix
           const base64Frame = base64data.split(",")[1];
 
+          const currentRectangle = rectangleRef.current;
           const frameData: VideoFrameWithAnnotations = {
             frame: base64Frame,
-            hasRectangle: rectangle !== null,
-            rectangle: rectangle || { x1: 0, y1: 0, x2: 0, y2: 0 },
+            hasRectangle: currentRectangle !== null,
+            rectangle: currentRectangle || { x1: 0, y1: 0, x2: 0, y2: 0 },
           };
 
           try {
+            // Debug logging (remove after testing)
+            if (frameIndexRef.current % 30 === 0) {
+              console.log("Frame data:", {
+                frameIndex: frameIndexRef.current,
+                frameLength: base64Frame.length,
+                hasRectangle: currentRectangle !== null,
+                rectangle: currentRectangle || { x1: 0, y1: 0, x2: 0, y2: 0 },
+              });
+            }
             socket.send(JSON.stringify(frameData));
             frameIndexRef.current++;
             setFrameCount((prev) => prev + 1);
@@ -169,6 +191,9 @@ export default function VideoBroadcaster() {
     return () => {
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
+      }
+      if (reverseIntervalRef.current) {
+        clearInterval(reverseIntervalRef.current);
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -224,14 +249,6 @@ export default function VideoBroadcaster() {
 
     setIsDrawing(false);
 
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      console.error("WebSocket not connected");
-      setStartPoint(null);
-      setCurrentPoint(null);
-      return;
-    }
-
     // Calculate video coordinates for both points
     const video = videoRef.current;
     const container = videoContainerRef.current;
@@ -246,21 +263,11 @@ export default function VideoBroadcaster() {
     const x2 = Math.round(coords.display.x * scaleX);
     const y2 = Math.round(coords.display.y * scaleY);
 
-    // Send rectangle coordinates to backend
-    const rectangleData = {
-      type: "rectangle",
-      x1,
-      y1,
-      x2,
-      y2,
-    };
-
-    try {
-      socket.send(JSON.stringify(rectangleData));
-      console.log("Rectangle sent:", rectangleData);
-    } catch (error) {
-      console.error("Failed to send rectangle:", error);
-    }
+    // Persist rectangle state - it will be embedded in every frame from now on
+    const rectData = { x1, y1, x2, y2 };
+    setRectangle(rectData);
+    rectangleRef.current = rectData;
+    console.log("Rectangle set:", rectData);
 
     // Reset drawing state
     setStartPoint(null);
@@ -340,6 +347,17 @@ export default function VideoBroadcaster() {
             <span>Frames sent: {frameCount}</span>
             <span>Direction: {isReversing ? "Reverse" : "Forward"}</span>
           </div>
+          
+          {/* AI Tracking Status */}
+          {rectangle && (
+            <div className="flex items-center gap-2 text-sm px-3 py-2 bg-green-50 border border-green-200 rounded-md">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-green-700 font-medium">AI Tracking Active</span>
+              <span className="text-green-600 text-xs">
+                ({rectangle.x1}, {rectangle.y1}) → ({rectangle.x2}, {rectangle.y2})
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

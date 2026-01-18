@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 from ultralytics import SAM
+from contextlib import asynccontextmanager
 import os
 import cv2
 import json
@@ -28,17 +29,6 @@ import numpy as np
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SAM3 Video Segmentation API")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Global model instance (loaded at startup)
 sam_model = None
 model_loaded = False
@@ -48,24 +38,39 @@ model_loaded = False
 # Note: model is now global, not per-session
 sessions: Dict[str, Any] = {}
 
-@app.on_event("startup")
-async def load_model():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Load SAM3 model at application startup to save time on first request"""
     global sam_model, model_loaded
     model_path = os.path.join(os.path.dirname(__file__), "sam3.pt")
     if not os.path.exists(model_path):
         logger.error(f"Model file not found at {model_path}")
         model_loaded = False
-        return
+    else:
+        try:
+            logger.info("Loading SAM3 model at startup...")
+            sam_model = SAM(model_path)
+            model_loaded = True
+            logger.info("SAM3 model loaded successfully!")
+        except Exception as e:
+            logger.error(f"Failed to load SAM3 model: {e}")
+            model_loaded = False
     
-    try:
-        logger.info("Loading SAM3 model at startup...")
-        sam_model = SAM(model_path)
-        model_loaded = True
-        logger.info("SAM3 model loaded successfully!")
-    except Exception as e:
-        logger.error(f"Failed to load SAM3 model: {e}")
-        model_loaded = False
+    yield
+    
+    # Cleanup on shutdown (optional)
+    logger.info("Application shutting down...")
+
+app = FastAPI(title="SAM3 Video Segmentation API", lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Helper function to extract regions (User's logic)
 def extract_regions(result, frame_index: int) -> Dict[str, Any]:
@@ -269,5 +274,9 @@ async def end_stream(session_id: str = Form(...)):
         return {"status": "success", "message": "Session ended"}
     else:
         return {"status": "warning", "message": "Session not found or already ended"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
