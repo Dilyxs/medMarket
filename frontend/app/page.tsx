@@ -6,6 +6,7 @@ import { ChatWidget } from "@/components/chat-widget";
 import { LiveBroadcastViewer } from "@/components/live-broadcast";
 import { LiveChatPanel } from "@/components/live-chat";
 import { BettingPanel } from "@/components/betting-panel";
+import { TestDepositPanel } from "@/components/test-deposit-panel";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
 
@@ -54,9 +55,24 @@ export default function Home() {
   }, []);
 
   const handleUnlockAssistant = async () => {
-    // TODO: integrate payment of 0.40 SOL here
-    setAssistantUnlocked(true);
-    sessionStorage.setItem("assistantUnlocked", "true");
+    try {
+      const res = await fetch("/api/unlock-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ user_id: user?._id }),
+      });
+
+      if (res.ok) {
+        setAssistantUnlocked(true);
+        sessionStorage.setItem("assistantUnlocked", "true");
+      } else {
+        const error = await res.json();
+        alert(`Unlock failed: ${error.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert(`Error unlocking assistant: ${err}`);
+    }
   };
 
   const handleLogout = async () => {
@@ -133,9 +149,12 @@ export default function Home() {
           <LiveBroadcastViewer />
         </div>
 
-        {/* Top Right - Live Chat */}
-        <div className="bg-card border-b border-border p-4 overflow-hidden flex flex-col">
-          <LiveChatPanel />
+        {/* Top Right - Live Chat + Test Panel */}
+        <div className="bg-card border-b border-border p-4 overflow-hidden flex flex-col gap-3">
+          <TestDepositPanel />
+          <div className="flex-1 overflow-hidden">
+            <LiveChatPanel />
+          </div>
         </div>
 
         {/* Bottom Left - Place Your Bets */}

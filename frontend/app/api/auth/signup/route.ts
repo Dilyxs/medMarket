@@ -10,6 +10,34 @@ interface SignupBody {
   newsletter?: boolean;
 }
 
+// Generate a proper Solana wallet address using crypto random
+function generateTestWallet() {
+  const base58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  
+  // Generate 32 random bytes for public key
+  const randomBytes = new Uint8Array(32);
+  crypto.getRandomValues(randomBytes);
+  
+  let address = "";
+  for (let i = 0; i < 44; i++) {
+    address += base58.charAt(randomBytes[i % 32] % base58.length);
+  }
+  
+  // Generate 64 random bytes for secret
+  const secretBytes = new Uint8Array(64);
+  crypto.getRandomValues(secretBytes);
+  
+  let secret = "";
+  for (let i = 0; i < 88; i++) {
+    secret += base58.charAt(secretBytes[i % 64] % base58.length);
+  }
+  
+  return {
+    address,
+    secret
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as SignupBody;
@@ -36,11 +64,20 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Generate a wallet for the user
+    const wallet = generateTestWallet();
+
     const insert = await users.insertOne({
       email,
       passwordHash,
       name: name || null,
       newsletter,
+      balance: 0,
+      wallet: {
+        address: wallet.address,
+        secret: wallet.secret,
+        createdAt: new Date()
+      },
       createdAt: new Date(),
     });
 

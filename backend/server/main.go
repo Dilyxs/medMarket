@@ -1,38 +1,96 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/dilyxs/medMarket/pkg"
+	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
+	// Load environment variables
+	if err := godotenv.Load("../.env"); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
+	// Connect to MongoDB
+	mongoURI := os.Getenv("MONGODB_URI")
+	if mongoURI == "" {
+		log.Fatal("MONGODB_URI not set in environment")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
+	if err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
+	defer mongoClient.Disconnect(context.Background())
+
+	// Verify MongoDB connection
+	if err := mongoClient.Ping(ctx, nil); err != nil {
+		log.Fatalf("MongoDB ping failed: %v", err)
+	}
+	log.Println("Connected to MongoDB")
+
+	// Get users collection
+	dbName := os.Getenv("MONGODB_DB")
+	if dbName == "" {
+		dbName = "db"
+	}
+	usersCollection := mongoClient.Database(dbName).Collection("users")
+
+	// Initialize hubs
 	broadcastServerHub := pkg.NewBroadcastServerHub()
 	go broadcastServerHub.StartHubWork()
 
-	// Chat hub
 	chatHub := pkg.NewChatHub()
 	go chatHub.Start()
 
-	http.HandleFunc("/broadcaster", func(w http.ResponseWriter, r *http.Request) {
+	// Setup router
+	router := mux.NewRouter()
+
+	// WebSocket routes
+	router.HandleFunc("/broadcaster", func(w http.ResponseWriter, r *http.Request) {
 		pkg.ConnectBroadCaster(broadcastServerHub, w, r)
 	})
-	http.HandleFunc("/viewer", func(w http.ResponseWriter, r *http.Request) {
-		// could ask user for an ID, now for random generate it, later add OAuth
+	router.HandleFunc("/viewer", func(w http.ResponseWriter, r *http.Request) {
 		id := rand.Intn(100000000)
 		pkg.AddNewUserViewerToHub(broadcastServerHub, w, r, id)
 	})
-	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
 		clientID := fmt.Sprintf("client-%d-%d", rand.Intn(1000000), rand.Intn(1000000))
 		pkg.AddChatClient(chatHub, w, r, clientID)
 	})
-	http.HandleFunc("/verify_deposit", pkg.VerifyDeposit)
+	router.HandleFunc("/verify_deposit", pkg.VerifyDeposit)
+
+	// Register Solana routes
+	RegisterSolanaRoutes(router, usersCollection)
+
+	// CORS middleware
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	fmt.Println("medMarket backend server running on :8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		fmt.Printf("Server error: %v\n", err)
-	}
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
