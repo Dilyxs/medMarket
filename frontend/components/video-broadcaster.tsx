@@ -56,10 +56,8 @@ export default function VideoBroadcaster() {
   
   const [status, setStatus] = useState<"connecting" | "open" | "closed" | "error">("connecting");
   const [frameCount, setFrameCount] = useState(0);
-  const [isReversing, setIsReversing] = useState(false);
   const frameIndexRef = useRef(0);
   const reconnectDelayRef = useRef(1000); // Start with 1 second
-  const reverseIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Drawing state
   const [isDrawing, setIsDrawing] = useState(false);
@@ -133,35 +131,13 @@ export default function VideoBroadcaster() {
     const video = videoRef.current;
     if (!video) return;
 
-    if (!isReversing) {
-      // Switch to reverse playback
-      setIsReversing(true);
-      video.pause();
-      
-      // Manually step backwards through the video
-      reverseIntervalRef.current = setInterval(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        
-        // Step back by ~33ms worth of video (assuming 30fps)
-        video.currentTime = Math.max(0, video.currentTime - 0.033);
-        
-        // If we've reached the beginning, switch back to forward
-        if (video.currentTime <= 0.1) {
-          if (reverseIntervalRef.current) {
-            clearInterval(reverseIntervalRef.current);
-            reverseIntervalRef.current = null;
-          }
-          setIsReversing(false);
-          video.currentTime = 0;
-          video.play();
-        }
-      }, 33); // 30fps
-    }
+    // Loop back to the beginning
+    video.currentTime = 0;
+    video.play();
   };
 
   const handleTimeUpdate = () => {
-    // No longer needed for reverse detection
+    // No longer needed
   };
 
   const captureAndSendFrame = () => {
@@ -238,7 +214,7 @@ export default function VideoBroadcaster() {
     const video = videoRef.current;
     const container = videoContainerRef.current;
     
-    if (!canvas || !video || !container || !polygonMetadata?.regions) return;
+    if (!canvas || !video || !container) return;
     
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -252,6 +228,9 @@ export default function VideoBroadcaster() {
       
       // Clear previous drawings
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // If no polygon metadata, just clear and return
+      if (!polygonMetadata?.regions) return;
       
       // Get video dimensions for scaling
       const videoWidth = video.videoWidth || 180;
@@ -504,7 +483,7 @@ export default function VideoBroadcaster() {
           <div className="flex items-center justify-between text-sm text-gray-600">
             <span>Status: {status}</span>
             <span>Frames sent: {frameCount}</span>
-            <span>Direction: {isReversing ? "Reverse" : "Forward"}</span>
+            {/* <span>Direction: {isReversing ? "Reverse" : "Forward"}</span> */}
           </div>
           
           {/* AI Tracking Status */}
