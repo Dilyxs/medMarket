@@ -143,7 +143,7 @@ export default function Home() {
       </header>
 
       {/* Main Content - 4 corners */}
-      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3.5fr_1.5fr] gap-0 h-[calc(100vh-73px)] overflow-hidden">
+      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[2.8fr_2.2fr] gap-0 h-[calc(100vh-73px)] overflow-hidden">
         {/* Top Left - Live Viewer */}
         <div className="bg-card flex items-center justify-center border-r border-b border-border p-4 overflow-hidden">
           <LiveBroadcastViewer />
