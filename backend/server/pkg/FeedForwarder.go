@@ -12,17 +12,13 @@ type UserViewer struct {
 	ID                        int
 	Conn                      *websocket.Conn
 	UserReceivingVideoDetails chan VideoFrameWithAnnotations
+	QandAnswerChan            chan QandAnswer
 }
 type Broadcaster struct {
 	ID                      int
 	Conn                    *websocket.Conn
 	UserReadingVideoDetails chan VideoFrameWithAnnotations
 }
-type Centroid struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-}
-
 type BoundingBox struct {
 	XMin   int `json:"x_min"`
 	YMin   int `json:"y_min"`
@@ -32,23 +28,37 @@ type BoundingBox struct {
 	Height int `json:"height"`
 }
 
+type Centroid struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
 type Region struct {
 	MaskIndex   int         `json:"mask_index"`
 	BoundingBox BoundingBox `json:"bounding_box"`
 	Centroid    Centroid    `json:"centroid"`
 	AreaPixels  int         `json:"area_pixels"`
-	MaskShape   []int       `json:"mask_shape"`
+}
+type RectangleDataValere struct {
+	X1 float64 `json:"x1"`
+	X2 float64 `json:"x2"`
+	Y1 float64 `json:"y1"`
+	Y2 float64 `json:"y2"`
+}
+type VideoFrameValere struct {
+	Frame         []byte              `json:"frame"`
+	HasRectangle  bool                `json:"hasrectangle"`
+	RectangleData RectangleDataValere `json:"rectangle"`
 }
 
-type MLAnalysisResult struct {
+type AnnotationMetadata struct {
 	FrameIndex    int      `json:"frame_index"`
 	MasksDetected int      `json:"masks_detected"`
 	Regions       []Region `json:"regions"`
 }
-
 type VideoFrameWithAnnotations struct {
-	Frame    []byte           `json:"frame"`
-	Analysis MLAnalysisResult `json:"analysis"`
+	Frame    []byte             `json:"frame"`
+	Metadata AnnotationMetadata `json:"metadata"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -59,11 +69,23 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+type QandAnswer struct {
+	Question         string   `json:"question"`
+	PossibleResponse []string `json:"possibleresponses"`
+	RightAnswerIndex int      `json:"rightanswerindex"`
+}
+type QuestionWithoutAnswer struct {
+	Question         string   `json:"question"`
+	PossibleResponse []string `json:"possibleresponses"`
+}
 type BroadcastServerHub struct {
+	AcceptingUsers                        bool
 	Viewers                               map[int]*UserViewer
+	ValereRawVideoDetailsChan             chan VideoFrameValere
 	VideoDetailsChan                      chan VideoFrameWithAnnotations
 	EndOFStream                           chan bool
 	ListenForIncomingUserOrDisconnections chan *UserViewerAddition
+	QandAnswer                            chan QandAnswer
 	Mu                                    sync.RWMutex
 }
 type UserViewerAddition struct {
@@ -112,7 +134,9 @@ func (b *BroadcastServerHub) AddOrRemoveUser() {
 	for incomingUser := range b.ListenForIncomingUserOrDisconnections {
 		b.Mu.Lock()
 		if incomingUser.WantsToAdd {
-			b.Viewers[incomingUser.User.ID] = incomingUser.User
+			if b.AcceptingUsers {
+				b.Viewers[incomingUser.User.ID] = incomingUser.User
+			}
 		} else {
 			delete(b.Viewers, incomingUser.User.ID)
 		}
@@ -166,14 +190,18 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 
 func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 	for {
-		var newMessage VideoFrameWithAnnotations
+		var newMessage VideoFrameValere
 		err := b.Conn.ReadJSON(&newMessage)
 		if err != nil {
 			fmt.Println("cannot decode video")
 			hub.EndOFStream <- true
 			return
 		}
-		hub.VideoDetailsChan <- newMessage
+		if !newMessage.HasRectangle {
+			hub.VideoDetailsChan <- VideoFrameWithAnnotations{Frame: newMessage.Frame, Metadata: AnnotationMetadata{}}
+		} else {
+		}
+		// hub.VideoDetailsChan <- newMessage
 	}
 }
 
@@ -192,10 +220,13 @@ func (b *BroadcastServerHub) ShareBroadscastingDetails() {
 
 func NewBroadcastServerHub() *BroadcastServerHub {
 	return &BroadcastServerHub{
+		ValereRawVideoDetailsChan:             make(chan VideoFrameValere, 1000),
+		AcceptingUsers:                        true,
 		Viewers:                               make(map[int]*UserViewer),
 		VideoDetailsChan:                      make(chan VideoFrameWithAnnotations, 1000),
 		EndOFStream:                           make(chan bool),
 		ListenForIncomingUserOrDisconnections: make(chan *UserViewerAddition, 1000),
+		QandAnswer:                            make(chan QandAnswer, 100),
 		Mu:                                    sync.RWMutex{},
 	}
 }
