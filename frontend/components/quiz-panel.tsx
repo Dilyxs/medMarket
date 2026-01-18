@@ -161,6 +161,14 @@ export function QuizPanel() {
   }, []);
 
   const handleNewQuestion = (question: QuizQuestion) => {
+    console.log("=== NEW QUESTION RECEIVED ===");
+    console.log("Question ID:", question.id);
+    console.log("Question Text:", question.question);
+    console.log("Options:", question.options);
+    console.log("Time Limit:", question.time_limit);
+    console.log("Start Time:", question.start_time);
+    console.log("============================");
+    
     setCurrentQuestion(question);
     setBets(new Array(question.options.length).fill(0));
     setBetSubmitted(false);

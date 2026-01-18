@@ -102,7 +102,7 @@ export default function Home() {
       </header>
 
       {/* Main Content - 4 corners */}
-      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[4fr_1fr] gap-0 h-[calc(100vh-73px)] overflow-hidden">
+      <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3fr_2fr] gap-0 h-[calc(100vh-73px)] overflow-hidden">
         {/* Top Left - Live Viewer */}
         <div className="bg-card flex items-center justify-center border-r border-b border-border p-4 overflow-hidden">
           <LiveBroadcastViewer />
@@ -114,7 +114,7 @@ export default function Home() {
         </div>
 
         {/* Bottom Left - Quiz Betting */}
-        <div className="bg-card border-r border-border p-6 overflow-hidden">
+        <div className="bg-card border-r border-border p-4 overflow-y-auto">
           <QuizPanel />
         </div>
 

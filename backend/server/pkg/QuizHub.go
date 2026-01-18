@@ -215,23 +215,34 @@ func (h *QuizHub) handleNewQuestion(question *Question) {
 		StartTime: time.Now().UnixMilli(),
 	}
 	
-	h.broadcastToPlayers(map[string]interface{}{
+	broadcastMsg := map[string]interface{}{
 		"type":     "new_question",
 		"question": questionMsg,
-	})
+	}
+	
+	log.Printf("Broadcasting question to players: ID=%s, Question=%s, Options=%v, TimeLimit=%d\n", 
+		questionMsg.ID, questionMsg.Question, questionMsg.Options, questionMsg.TimeLimit)
+	
+	h.broadcastToPlayers(broadcastMsg)
 	
 	// Notify broadcaster that question is live
-	if h.Broadcaster != nil {
-		h.Broadcaster.Send <- map[string]interface{}{
+	h.Mu.RLock()
+	broadcaster := h.Broadcaster
+	h.Mu.RUnlock()
+	
+	if broadcaster != nil {
+		broadcaster.Send <- map[string]interface{}{
 			"type": "question_live",
 			"question_id": question.ID,
 		}
 	}
 	
 	// Start timer
+	h.Mu.Lock()
 	h.GameState.Timer = time.AfterFunc(time.Duration(question.TimeLimit)*time.Second, func() {
 		h.processQuestionResults()
 	})
+	h.Mu.Unlock()
 }
 
 func (h *QuizHub) handleBetSubmission(bet *BetSubmission) {
@@ -289,6 +300,11 @@ func (h *QuizHub) processQuestionResults() {
 	}
 	
 	question := h.GameState.CurrentQuestion
+	if question == nil {
+		log.Println("processQuestionResults called but CurrentQuestion is nil")
+		h.Mu.Unlock()
+		return
+	}
 	correctIndex := question.CorrectIndex
 	
 	log.Printf("Processing results for question: %s (correct answer: %d)\n", question.ID, correctIndex)
@@ -430,8 +446,12 @@ func (h *QuizHub) processQuestionResults() {
 	h.broadcastToPlayers(results)
 	
 	// Notify broadcaster
-	if h.Broadcaster != nil {
-		h.Broadcaster.Send <- results
+	h.Mu.RLock()
+	broadcaster := h.Broadcaster
+	h.Mu.RUnlock()
+	
+	if broadcaster != nil {
+		broadcaster.Send <- results
 	}
 	
 	// Eliminate players by disconnecting them
@@ -462,8 +482,12 @@ func (h *QuizHub) processQuestionResults() {
 			"results": results,
 		})
 		
-		if h.Broadcaster != nil {
-			h.Broadcaster.Send <- map[string]interface{}{
+		h.Mu.RLock()
+		broadcaster := h.Broadcaster
+		h.Mu.RUnlock()
+		
+		if broadcaster != nil {
+			broadcaster.Send <- map[string]interface{}{
 				"type": "game_ended",
 				"results": results,
 			}
@@ -482,8 +506,12 @@ func (h *QuizHub) processQuestionResults() {
 		} else {
 			h.Mu.Unlock()
 			// Notify broadcaster they can submit next question
-			if h.Broadcaster != nil {
-				h.Broadcaster.Send <- map[string]interface{}{
+			h.Mu.RLock()
+			broadcaster := h.Broadcaster
+			h.Mu.RUnlock()
+			
+			if broadcaster != nil {
+				broadcaster.Send <- map[string]interface{}{
 					"type": "ready_for_question",
 					"remaining_players": remainingCount,
 				}
