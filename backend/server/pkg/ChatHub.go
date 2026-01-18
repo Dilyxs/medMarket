@@ -107,7 +107,7 @@ func (c *ChatClient) WritePump() {
 }
 
 func AddChatClient(hub *ChatHub, w http.ResponseWriter, r *http.Request, clientID string) {
-	var upgrader = websocket.Upgrader{
+	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
 		},

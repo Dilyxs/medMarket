@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -24,14 +25,15 @@ func main() {
 	}
 
 	broadcastServerHub := pkg.NewBroadcastServerHub(aiServiceURL)
-	chatHub := pkg.NewChatServerHub()
-	chatHub.Run()
+	chatHub := pkg.NewChatHub()
+	go chatHub.Start()
 	go broadcastServerHub.StartHubWork()
 
 	log.Printf("Starting server on :8080 with AI service at %s", aiServiceURL)
 
 	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
-		pkg.ServeChat(chatHub, w, r)
+		clientID := fmt.Sprintf("client-%d-%d", rand.Intn(1000000), rand.Intn(1000000))
+		pkg.AddChatClient(chatHub, w, r, clientID)
 	})
 	http.HandleFunc("/broadcaster", func(w http.ResponseWriter, r *http.Request) {
 		pkg.ConnectBroadCaster(broadcastServerHub, w, r)
