@@ -91,7 +91,7 @@ func (b *Broadcaster) StartGame(w http.ResponseWriter, r *http.Request, hub *Bro
 		for incomingUserResponseForQuestion := range hub.QandAnswerEvaluator {
 			loss := incomingUserResponseForQuestion.ChoseAnswer.CalculteLoss(qa.RightAnswerIndex)
 			remainingCurrency := incomingUserResponseForQuestion.ChoseAnswer.CalculateTotal() - loss
-			TotalCollectedSum += loss
+			// TotalCollectedSum += loss
 			if remainingCurrency == 0 {
 				hub.Mu.Lock()
 				delete(hub.Viewers, incomingUserResponseForQuestion.User.ID)
