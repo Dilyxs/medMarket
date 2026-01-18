@@ -8,10 +8,13 @@ import (
 )
 
 func main() {
-	// in theory we could have multiple different videoServers running Concurrently. but
-	// for simplicity we will just run one.
 	broadcastServerHub := pkg.NewBroadcastServerHub()
+	chatHub := pkg.NewChatServerHub()
+	chatHub.Run()
 	go broadcastServerHub.StartHubWork()
+	http.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
+		pkg.ServeChat(chatHub, w, r)
+	})
 	http.HandleFunc("/broadcaster", func(w http.ResponseWriter, r *http.Request) {
 		pkg.ConnectBroadCaster(broadcastServerHub, w, r)
 	})
