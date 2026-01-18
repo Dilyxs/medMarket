@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChatWidget } from "@/components/chat-widget";
 import { LiveBroadcastViewer } from "@/components/live-broadcast";
 import { LiveChatPanel } from "@/components/live-chat";
-import { BettingPanel } from "@/components/betting-panel";
+import { QuizPanel } from "@/components/quiz-panel";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
 
@@ -113,9 +113,9 @@ export default function Home() {
           <LiveChatPanel />
         </div>
 
-        {/* Bottom Left - Place Your Bets */}
+        {/* Bottom Left - Quiz Betting */}
         <div className="bg-card border-r border-border p-6 overflow-hidden">
-          <BettingPanel />
+          <QuizPanel />
         </div>
 
         {/* Bottom Right - AI Assistant */}

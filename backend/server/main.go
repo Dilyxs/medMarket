@@ -60,8 +60,10 @@ func main() {
 	// Initialize hubs
 	broadcastServerHub := pkg.NewBroadcastServerHub(aiServiceURL)
 	chatHub := pkg.NewChatHub()
+	quizHub := pkg.NewQuizHub(usersCollection)
 	go chatHub.Start()
 	go broadcastServerHub.StartHubWork()
+	go quizHub.Start()
 
 	// Setup router
 	router := mux.NewRouter()
@@ -79,10 +81,31 @@ func main() {
 		clientID := fmt.Sprintf("client-%d-%d", rand.Intn(1000000), rand.Intn(1000000))
 		pkg.AddChatClient(chatHub, w, r, clientID)
 	})
+	router.HandleFunc("/quiz-broadcaster", func(w http.ResponseWriter, r *http.Request) {
+		pkg.ConnectQuizBroadcaster(quizHub, w, r)
+	})
+	router.HandleFunc("/quiz-viewer", func(w http.ResponseWriter, r *http.Request) {
+		// Extract user from query params or headers
+		// For now, we'll use query params: ?userId=...&username=...&email=...
+		userID := r.URL.Query().Get("userId")
+		username := r.URL.Query().Get("username")
+		email := r.URL.Query().Get("email")
+		
+		if userID == "" || email == "" {
+			http.Error(w, "Missing user credentials", http.StatusBadRequest)
+			return
+		}
+		
+		if username == "" {
+			username = email
+		}
+		
+		pkg.ConnectQuizPlayer(quizHub, w, r, userID, username, email)
+	})
 	router.HandleFunc("/verify_deposit", pkg.VerifyDeposit)
 
 	// Register Solana routes
-	RegisterSolanaRoutes(router, usersCollection)
+	// RegisterSolanaRoutes(router, usersCollection)
 
 	// CORS middleware
 	router.Use(func(next http.Handler) http.Handler {

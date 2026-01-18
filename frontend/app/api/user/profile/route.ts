@@ -18,6 +18,7 @@ export async function GET(request: Request) {
       email: user.email,
       name: user.name,
       balance: user.balance || 0,
+      tokens: user.tokens || 0,
       wallet: {
         address: user.wallet?.address || null,
       },

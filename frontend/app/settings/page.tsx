@@ -24,12 +24,15 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [newsletter, setNewsletter] = useState(false);
   const [balance, setBalance] = useState(0);
+  const [tokens, setTokens] = useState(0);
+  const [solToConvert, setSolToConvert] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawWallet, setWithdrawWallet] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export default function SettingsPage() {
           const profileData = await profileRes.json();
           console.log("Profile data:", profileData);
           setBalance(profileData.balance || 0);
+          setTokens(profileData.tokens || 0);
           if (profileData.wallet?.address) {
             setWalletAddress(profileData.wallet.address);
           } else {
@@ -205,6 +209,7 @@ export default function SettingsPage() {
         if (profileRes.ok) {
           const profileData = await profileRes.json();
           setBalance(profileData.balance || 0);
+          setTokens(profileData.tokens || 0);
         }
       }
     } catch (err) {
@@ -212,6 +217,48 @@ export default function SettingsPage() {
       setError("Unexpected error");
     } finally {
       setWithdrawing(false);
+    }
+  };
+
+  const handleConvertTokens = async () => {
+    if (!solToConvert || parseFloat(solToConvert) <= 0) {
+      setError("Please enter a valid amount");
+      return;
+    }
+    if (parseFloat(solToConvert) > balance) {
+      setError("Insufficient SOL balance");
+      return;
+    }
+
+    setConverting(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/tokens/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          solAmount: parseFloat(solToConvert),
+        }),
+      });
+
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setError(data.error || "Failed to convert tokens");
+      } else {
+        setMessage(`Converted ${data.sol_converted} SOL to ${data.tokens_received} tokens`);
+        setBalance(data.new_sol_balance);
+        setTokens(data.new_token_balance);
+        setSolToConvert("");
+      }
+    } catch (err) {
+      console.error("Token conversion error:", err);
+      setError("Unexpected error");
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -265,16 +312,55 @@ export default function SettingsPage() {
           </div>
 
           {/* Balance Display */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="bg-muted rounded-lg p-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">App Balance</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">SOL Balance</p>
               <p className="text-2xl font-bold text-foreground">{balance.toFixed(4)}</p>
               <p className="text-xs text-muted-foreground mt-1">SOL available</p>
             </div>
             <div className="bg-muted rounded-lg p-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Fee</p>
-              <p className="text-2xl font-bold text-foreground">0.00005</p>
-              <p className="text-xs text-muted-foreground mt-1">SOL per transaction</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Game Tokens</p>
+              <p className="text-2xl font-bold text-primary">{tokens.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mt-1">For quiz betting</p>
+            </div>
+            <div className="bg-muted rounded-lg p-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Rate</p>
+              <p className="text-2xl font-bold text-foreground">200</p>
+              <p className="text-xs text-muted-foreground mt-1">Tokens per SOL</p>
+            </div>
+          </div>
+
+          {/* Token Conversion */}
+          <div className="border-t border-border pt-6 space-y-4">
+            <h3 className="font-semibold text-foreground">Convert SOL to Tokens</h3>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="solToConvert" className="text-sm font-medium">SOL Amount</Label>
+                <Input
+                  id="solToConvert"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={balance}
+                  placeholder="0.00"
+                  value={solToConvert}
+                  onChange={(e) => setSolToConvert(e.target.value)}
+                  className="mt-1"
+                />
+                {solToConvert && parseFloat(solToConvert) > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    = {(parseFloat(solToConvert) * 200).toFixed(2)} tokens
+                  </p>
+                )}
+              </div>
+
+              <Button
+                onClick={handleConvertTokens}
+                disabled={converting || !solToConvert || parseFloat(solToConvert) <= 0 || parseFloat(solToConvert) > balance}
+                className="w-full h-10 bg-primary"
+              >
+                {converting ? "Converting..." : "Convert to Tokens"}
+              </Button>
             </div>
           </div>
 
