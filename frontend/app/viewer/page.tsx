@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChatWidget } from "@/components/chat-widget";
-// import { LiveBroadcastViewer } from "@/components/live-broadcast";
-import VideoBroadcaster from "@/components/video-broadcaster";
+import { LiveBroadcastViewer } from "@/components/live-broadcast";
 import { LiveChatPanel } from "@/components/live-chat";
 import { Button } from "@/components/ui/button";
 import { MessageCircleIcon, User2Icon } from "lucide-react";
@@ -103,14 +102,9 @@ export default function Home() {
 
       {/* Main Content - 4 corners */}
       <div className="grid grid-cols-[2.25fr_0.75fr] grid-rows-[3.5fr_1.5fr] gap-0 h-[calc(100vh-73px)]">
-        {/* Top Left - Live Viewer and Broadcaster */}
-        <div className="bg-card flex items-center justify-center gap-4 border-r border-b border-border p-4">
-          <div className="flex-1 flex items-center justify-center">
-            <VideoBroadcaster />
-          </div>
-          {/* <div className="flex-1 flex items-center justify-center">
-            <LiveBroadcastViewer />
-          </div> */}
+        {/* Top Left - Live Viewer */}
+        <div className="bg-card flex items-center justify-center border-r border-b border-border p-4">
+          <LiveBroadcastViewer />
         </div>
 
         {/* Top Right - Live Chat */}
