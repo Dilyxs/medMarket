@@ -18,29 +18,37 @@ type Broadcaster struct {
 	Conn                    *websocket.Conn
 	UserReadingVideoDetails chan VideoFrameWithAnnotations
 }
-
-type Rectange struct {
-	X      int
-	Y      int
-	Width  int
-	Height int
+type Centroid struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
-type Dot struct {
-	X      int
-	Y      int
-	Radius int
+type BoundingBox struct {
+	XMin   int `json:"x_min"`
+	YMin   int `json:"y_min"`
+	XMax   int `json:"x_max"`
+	YMax   int `json:"y_max"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type Region struct {
+	MaskIndex   int         `json:"mask_index"`
+	BoundingBox BoundingBox `json:"bounding_box"`
+	Centroid    Centroid    `json:"centroid"`
+	AreaPixels  int         `json:"area_pixels"`
+	MaskShape   []int       `json:"mask_shape"`
+}
+
+type MLAnalysisResult struct {
+	FrameIndex    int      `json:"frame_index"`
+	MasksDetected int      `json:"masks_detected"`
+	Regions       []Region `json:"regions"`
 }
 
 type VideoFrameWithAnnotations struct {
-	Frame       []byte       `json:"frame"`
-	Annotations []Annotation `json:"annotations"`
-}
-
-type Annotation struct {
-	Color string
-	Rect  Rectange
-	Dot   Dot
+	Frame    []byte           `json:"frame"`
+	Analysis MLAnalysisResult `json:"analysis"`
 }
 
 var upgrader = websocket.Upgrader{
