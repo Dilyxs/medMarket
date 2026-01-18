@@ -327,10 +327,10 @@ export default function VideoBroadcaster() {
     // Connect WebSocket
     connectWebSocket();
 
-    // Start frame capture interval at 30 FPS (33ms)
+    // Start frame capture interval with 75ms delay between frames
     frameIntervalRef.current = setInterval(() => {
       captureAndSendFrame();
-    }, 33);
+    }, 150);
 
     // Cleanup
     return () => {
