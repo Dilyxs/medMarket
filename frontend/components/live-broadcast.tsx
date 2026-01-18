@@ -21,6 +21,7 @@ interface Region {
   bounding_box: BoundingBox;
   centroid: Centroid;
   area_pixels: number;
+  polygon?: number[][];
 }
 
 interface AnnotationMetadata {
@@ -62,6 +63,17 @@ export function LiveBroadcastViewer() {
         const data = JSON.parse(event.data) as IncomingFrame;
         setLastFrame(data);
         setReceivedCount((c) => c + 1);
+        
+        // Clear canvas if no regions detected
+        if (data.metadata && data.metadata.masks_detected === 0) {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+          }
+        }
       } catch (err) {
         console.error("Failed to parse broadcast message", err);
       }
@@ -112,11 +124,11 @@ export function LiveBroadcastViewer() {
       // Clear previous drawings
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Assume video dimensions are 180x180 (as specified)
-      const videoWidth = 180;
-      const videoHeight = 180;
+      // Get actual image dimensions (not displayed size, but intrinsic size)
+      const videoWidth = img.naturalWidth || 180;
+      const videoHeight = img.naturalHeight || 180;
 
-      // Calculate scaling factors
+      // Calculate scaling factors from video space to display space
       const scaleX = canvas.width / videoWidth;
       const scaleY = canvas.height / videoHeight;
 
@@ -130,28 +142,54 @@ export function LiveBroadcastViewer() {
         const width = bbox.width * scaleX;
         const height = bbox.height * scaleY;
 
-        // Draw bounding box
-        ctx.strokeStyle = `hsl(${(idx * 137) % 360}, 70%, 50%)`;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, width, height);
+        const color = `hsl(${(idx * 137) % 360}, 70%, 50%)`;
+        
+        // Draw polygon if available (filled with transparency)
+        if (region.polygon && region.polygon.length > 0) {
+          ctx.beginPath();
+          region.polygon.forEach((point, i) => {
+            const px = point[0] * scaleX;
+            const py = point[1] * scaleY;
+            if (i === 0) {
+              ctx.moveTo(px, py);
+            } else {
+              ctx.lineTo(px, py);
+            }
+          });
+          ctx.closePath();
+          
+          // Fill with semi-transparent color
+          ctx.fillStyle = color.replace('50%', '50%').replace(')', ', 0.3)');
+          ctx.fill();
+          
+          // Stroke the outline
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        } else {
+          // Fallback to bounding box if no polygon
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, width, height);
+        }
 
         // Draw centroid
         const cx = region.centroid.x * scaleX;
         const cy = region.centroid.y * scaleY;
-        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
         ctx.fill();
 
         // Draw label
-        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillStyle = color;
         ctx.font = "12px sans-serif";
         ctx.fillText(`Region ${region.mask_index}`, x, y - 5);
       });
     };
 
     // If image already loaded, draw immediately
-    if (img.complete) {
+    if (img.complete && img.naturalWidth > 0) {
       drawAnnotations();
     } else {
       // Otherwise wait for load
@@ -163,7 +201,7 @@ export function LiveBroadcastViewer() {
   const annotationCount = lastFrame?.metadata?.regions?.length ?? 0;
 
   return (
-    <div className="w-full h-full flex flex-col bg-card border border-border rounded-lg shadow-lg">
+    <div className="w-full max-w-md max-h-[500px] flex flex-col bg-card border border-border rounded-lg shadow-lg">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <span

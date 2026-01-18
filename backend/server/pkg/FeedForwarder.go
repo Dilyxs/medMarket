@@ -39,6 +39,7 @@ type Region struct {
 	BoundingBox BoundingBox `json:"bounding_box"`
 	Centroid    Centroid    `json:"centroid"`
 	AreaPixels  int         `json:"area_pixels"`
+	Polygon     [][]int     `json:"polygon"`
 }
 type RectangleDataValere struct {
 	X1 float64 `json:"x1"`
@@ -118,6 +119,7 @@ func AddNewUserViewerToHub(hub *BroadcastServerHub, w http.ResponseWriter, r *ht
 	}
 	go VideoUser.ListenForVideoDetails()
 	go VideoUser.ReadPump(hub)
+	go VideoUser.PingLoop()
 }
 
 func (v *UserViewer) ReadPump(hub *BroadcastServerHub) {
@@ -128,8 +130,17 @@ func (v *UserViewer) ReadPump(hub *BroadcastServerHub) {
 			WantsToAdd: false,
 		}
 	}()
+	
+	// Set up pong handler to keep connection alive
+	v.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	v.Conn.SetPongHandler(func(string) error {
+		v.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+	
 	for {
 		if _, _, err := v.Conn.ReadMessage(); err != nil { // ok so frontend will always send in some pings and other stuff, just ignore that stuff
+			log.Printf("Viewer %d ReadPump error: %v", v.ID, err)
 			break
 		}
 	}
@@ -151,7 +162,22 @@ func (b *BroadcastServerHub) AddOrRemoveUser() {
 
 func (v *UserViewer) ListenForVideoDetails() {
 	for message := range v.UserReceivingVideoDetails {
+		v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		if err := v.Conn.WriteJSON(message); err != nil { // happens if user ends the session
+			log.Printf("Viewer %d ListenForVideoDetails error: %v", v.ID, err)
+			return
+		}
+	}
+}
+
+func (v *UserViewer) PingLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		v.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := v.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			log.Printf("Viewer %d PingLoop error: %v", v.ID, err)
 			return
 		}
 	}
@@ -188,6 +214,16 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 			hub.EndOFStream <- true
 		}
 	}
+	
+	// Clean up any existing session when new broadcaster connects
+	if hub.CurrentSession != "" {
+		log.Printf("New broadcaster connecting, cleaning up old session: %s", hub.CurrentSession)
+		if err := hub.AIClient.EndSession(hub.CurrentSession); err != nil {
+			log.Printf("Error ending old session: %v", err)
+		}
+		hub.CurrentSession = ""
+	}
+	
 	defer func() {
 		conn.Close()
 		// Clean up AI session on broadcaster disconnect
@@ -208,6 +244,17 @@ func ConnectBroadCaster(hub *BroadcastServerHub, w http.ResponseWriter, r *http.
 		Conn:                    conn,
 		UserReadingVideoDetails: make(chan VideoFrameWithAnnotations, 1000),
 	}
+	
+	// Start goroutine to send annotated frames back to broadcaster
+	go func() {
+		for frame := range Broadcaster.UserReadingVideoDetails {
+			if err := Broadcaster.Conn.WriteJSON(frame); err != nil {
+				log.Printf("Error sending frame to broadcaster: %v", err)
+				return
+			}
+		}
+	}()
+	
 	Broadcaster.ListenForVideoInput(hub)
 }
 
@@ -223,9 +270,20 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 		
 		log.Printf("Received frame: size=%d bytes, hasRectangle=%v", len(newMessage.Frame), newMessage.HasRectangle)
 
+		var annotatedFrame VideoFrameWithAnnotations
+		
 		if !newMessage.HasRectangle {
 			// No annotation - pass frame through with empty metadata
-			hub.VideoDetailsChan <- VideoFrameWithAnnotations{
+			// If we had an active session, end it
+			if hub.CurrentSession != "" {
+				log.Printf("Rectangle cleared, ending AI session: %s", hub.CurrentSession)
+				if err := hub.AIClient.EndSession(hub.CurrentSession); err != nil {
+					log.Printf("Error ending AI session: %v", err)
+				}
+				hub.CurrentSession = ""
+			}
+			
+			annotatedFrame = VideoFrameWithAnnotations{
 				Frame:    newMessage.Frame,
 				Metadata: AnnotationMetadata{},
 			}
@@ -266,14 +324,48 @@ func (b *Broadcaster) ListenForVideoInput(hub *BroadcastServerHub) {
 					metadata = AnnotationMetadata{}
 				} else {
 					metadata = frameData
+					
+					// Check if tracking was lost (no regions detected)
+					if metadata.MasksDetected == 0 {
+						log.Printf("Tracking lost, restarting session with new rectangle")
+						// End current session
+						if endErr := hub.AIClient.EndSession(hub.CurrentSession); endErr != nil {
+							log.Printf("Error ending session: %v", endErr)
+						}
+						hub.CurrentSession = ""
+						
+						// Restart with the current rectangle annotation
+						sessionID, frameData, restartErr := hub.AIClient.StartSegmentationSession(
+							newMessage.Frame,
+							newMessage.RectangleData,
+						)
+						
+						if restartErr != nil {
+							log.Printf("AI service error restarting session: %v", restartErr)
+							metadata = AnnotationMetadata{}
+						} else {
+							hub.CurrentSession = sessionID
+							metadata = frameData
+							log.Printf("Session restarted: %s with %d regions detected", sessionID, frameData.MasksDetected)
+						}
+					}
 				}
 			}
 
-			// Send frame with AI-generated metadata
-			hub.VideoDetailsChan <- VideoFrameWithAnnotations{
+			annotatedFrame = VideoFrameWithAnnotations{
 				Frame:    newMessage.Frame,
 				Metadata: metadata,
 			}
+		}
+		
+		// Send frame with metadata to viewers
+		hub.VideoDetailsChan <- annotatedFrame
+		
+		// Send frame with metadata back to broadcaster
+		select {
+		case b.UserReadingVideoDetails <- annotatedFrame:
+		default:
+			// Non-blocking send to avoid deadlock if broadcaster isn't reading
 		}
 	}
 }
@@ -285,6 +377,7 @@ func (b *BroadcastServerHub) ShareBroadscastingDetails() {
 			select {
 			case viewer.UserReceivingVideoDetails <- message:
 			default:
+				log.Printf("Warning: Dropping frame for viewer %d (channel full)", viewer.ID)
 			}
 		}
 		b.Mu.RUnlock()

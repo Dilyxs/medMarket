@@ -98,6 +98,21 @@ def extract_regions(result, frame_index: int) -> Dict[str, Any]:
                 centroid_x = int(np.mean(nonzero[1]))
                 area = int(np.sum(mask_np > 0))
                 
+                # Extract polygon contours from mask
+                mask_uint8 = (mask_np > 0).astype(np.uint8) * 255
+                contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+                # Convert largest contour to polygon points
+                polygon = []
+                if contours:
+                    # Get the largest contour
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    # Simplify contour to reduce points (epsilon = 1% of perimeter)
+                    epsilon = 0.01 * cv2.arcLength(largest_contour, True)
+                    approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+                    # Convert to list of [x, y] coordinates
+                    polygon = [[int(point[0][0]), int(point[0][1])] for point in approx]
+                
                 region_info = {
                     "mask_index": mask_idx,
                     "bounding_box": {
@@ -112,7 +127,8 @@ def extract_regions(result, frame_index: int) -> Dict[str, Any]:
                         "x": centroid_x,
                         "y": centroid_y
                     },
-                    "area_pixels": area
+                    "area_pixels": area,
+                    "polygon": polygon
                 }
                 frame_data["regions"].append(region_info)
     
@@ -171,13 +187,22 @@ async def start_stream(
         # Extract data
         result_data = extract_regions(results[0], frame_index=0)
         
-        # Calculate new bboxes for next frame from masks
+        # Calculate new bboxes for next frame from masks with padding
         next_bboxes = []
         for region in result_data["regions"]:
             bbox = region["bounding_box"]
+            # Add 10% padding on each side to prevent progressive shrinking
+            width = bbox["x_max"] - bbox["x_min"]
+            height = bbox["y_max"] - bbox["y_min"]
+            padding_x = int(width * 0.1)
+            padding_y = int(height * 0.1)
+            
             # Format: [x_min, y_min, x_max, y_max]
             next_bboxes.append([
-                bbox["x_min"], bbox["y_min"], bbox["x_max"], bbox["y_max"]
+                max(0, bbox["x_min"] - padding_x),
+                max(0, bbox["y_min"] - padding_y),
+                bbox["x_max"] + padding_x,
+                bbox["y_max"] + padding_y
             ])
             
         if not next_bboxes:
@@ -244,14 +269,21 @@ async def process_frame(
         # Extract data
         result_data = extract_regions(results[0], frame_index=current_idx)
         
-        # Update bboxes for next frame
+        # Update bboxes for next frame with padding to prevent shrinking
         next_bboxes = []
         for region in result_data["regions"]:
             bbox = region["bounding_box"]
-             # Add padding? 
-             # For now, just strict box
+            # Add 10% padding on each side to prevent progressive shrinking
+            width = bbox["x_max"] - bbox["x_min"]
+            height = bbox["y_max"] - bbox["y_min"]
+            padding_x = int(width * 0.1)
+            padding_y = int(height * 0.1)
+            
             next_bboxes.append([
-                bbox["x_min"], bbox["y_min"], bbox["x_max"], bbox["y_max"]
+                max(0, bbox["x_min"] - padding_x),
+                max(0, bbox["y_min"] - padding_y),
+                bbox["x_max"] + padding_x,
+                bbox["y_max"] + padding_y
             ])
         
         session["current_bboxes"] = next_bboxes
