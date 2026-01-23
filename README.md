@@ -2,6 +2,8 @@
 
 **MedMarket** is a medical education platform that combines live video broadcasting, real-time interactive quizzes, AI-powered video analysis, and blockchain-based payments. The platform enables medical professionals to conduct live educational sessions with audience participation, betting mechanics, and Solana cryptocurrency integration.
 
+[See Devpost/Demo](https://devpost.com/software/1162978)
+
 ---
 
 ## 🌟 Key Features
@@ -339,30 +341,6 @@ See [backend/ai_service/README.md](./backend/ai_service/README.md) for details.
 
 ---
 
-## 🔒 Security Considerations
-
-### Implemented Security
-- ✅ Session-based authentication with JWT
-- ✅ Password hashing with bcrypt
-- ✅ On-chain transaction verification
-- ✅ Signature replay protection
-- ✅ CORS configuration
-- ✅ Environment variable management
-- ✅ MongoDB connection encryption
-
-### Production Recommendations
-- [ ] Move treasury keys to secure key management (AWS KMS, HashiCorp Vault)
-- [ ] Implement rate limiting on all endpoints
-- [ ] Add multi-signature for large withdrawals
-- [ ] Set up transaction monitoring and alerts
-- [ ] Use mainnet for production (currently configured)
-- [ ] Implement withdrawal approval queue
-- [ ] Add minimum deposit/withdrawal amounts
-- [ ] Enable 2FA for user accounts
-- [ ] Regular security audits
-
----
-
 ## 🧪 Testing
 
 ### Backend Tests
@@ -550,50 +528,6 @@ npm run dev
 
 ---
 
-## 📊 Project Status
-
-**Current Version:** Alpha (Development)
-**Last Updated:** January 2024
-
-### Completed Features
-- ✅ User authentication system
-- ✅ Live broadcasting infrastructure
-- ✅ Real-time chat
-- ✅ Interactive quiz system
-- ✅ Solana mainnet integration
-- ✅ Wallet deposit/withdrawal
-- ✅ AI video segmentation
-- ✅ MongoDB persistence
-- ✅ WebSocket real-time communication
-
-### In Progress
-- 🚧 Enhanced AI assistant features
-- 🚧 Advanced betting mechanics
-- 🚧 Mobile responsive design improvements
-- 🚧 Performance optimizations
-
-### Planned Features
-- 📋 Email notifications
-- 📋 Advanced analytics dashboard
-- 📋 Multi-language support
-- 📋 Video replay and VOD system
-- 📋 Leaderboards and achievements
-- 📋 Social sharing features
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-## 👥 Authors
-
-**vlrr7** - *Initial work and development*
-
----
-
 ## 🙏 Acknowledgments
 
 - **Solana Foundation** - Blockchain infrastructure
@@ -603,23 +537,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Go Community** - Backend tools and libraries
 
 ---
-
-## 📞 Support
-
-For questions, issues, or feature requests:
-- **GitHub Issues:** [github.com/vlrr7/MedMarket/issues](https://github.com/vlrr7/MedMarket/issues)
-- **Documentation:** See docs folder for detailed guides
-
----
-
-## 🔗 Links
-
-- **Repository:** [github.com/vlrr7/MedMarket](https://github.com/vlrr7/MedMarket)
-- **Solana Docs:** [docs.solana.com](https://docs.solana.com)
-- **Next.js Docs:** [nextjs.org/docs](https://nextjs.org/docs)
-- **MongoDB Docs:** [docs.mongodb.com](https://docs.mongodb.com)
-- **Ultralytics SAM:** [docs.ultralytics.com](https://docs.ultralytics.com)
-
----
-
-*Built with ❤️ for medical education and blockchain innovation*
